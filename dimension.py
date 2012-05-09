@@ -17,8 +17,6 @@ class Dimension(object):
         """
         pass
 
-    def sync_coordinate(self, pipe):
-        pass
 
 class Date(Dimension):
 
