@@ -1,5 +1,5 @@
 from os import path, mkdir
-import json
+from json import loads, dumps, dump, load
 from collections import defaultdict
 from contextlib import contextmanager
 from leveldb import LevelDB, WriteBatch
@@ -19,7 +19,6 @@ class LevelDBBackend(object):
                 self.meta[dim][key].update(value)
 
     def get(self, key):
-        key = json.dumps(key)
         if key in self._write_cache:
             return self._write_cache[key]
 
@@ -27,28 +26,15 @@ class LevelDBBackend(object):
             return self._read_cache[key]
 
         try:
-            value = float(self.ldb.Get(key))
+            value = loads(self.ldb.Get(key))
         except KeyError:
-            value = 0
+            value = defaultdict(float)
 
         self._read_cache[key] = value
         return value
 
-    def incr(self, key, increment):
-        key = json.dumps(key)
-
-        if key in self._read_cache:
-            value = self._read_cache.pop(key)
-
-        elif key in self._write_cache:
-            value = self._write_cache[key]
-        else:
-            try:
-                value = float(self.ldb.Get(key))
-            except KeyError:
-                value = 0.0
-
-        self._write_cache[key] = value + increment
+    def set(self, key, value):
+        self._write_cache[key] = value
 
     def close(self, namespace):
         meta = {}
@@ -58,11 +44,12 @@ class LevelDBBackend(object):
                 meta[dim][key] = list(value)
 
         db_path = path.join(base_path, namespace, 'meta')
-        json.dump(meta, open(db_path, 'w'))
+        with open(db_path, 'w') as fh:
+            dump(meta, fh)
 
         batch = WriteBatch()
         for key, value in self._write_cache.iteritems():
-            batch.Put(key, str(value))
+            batch.Put(key, dumps(value))
         self.ldb.Write(batch)
 
 
@@ -83,7 +70,8 @@ def get_db(namespace):
 
     meta_path = path.join(db_path, 'meta')
     if path.exists(meta_path):
-        meta = json.load(open(meta_path))
+        with open(meta_path) as fh:
+            meta = load(fh)
     else:
         meta = {}
 
