@@ -4,8 +4,11 @@ from collections import defaultdict
 from contextlib import contextmanager
 from leveldb import LevelDB, WriteBatch
 
-base_path = None
-all_db = {}
+import space
+
+
+MAX_CACHE = 10000
+
 
 class LevelDBBackend(object):
 
@@ -30,44 +33,44 @@ class LevelDBBackend(object):
         except KeyError:
             value = defaultdict(float)
 
+        if len(self._read_cache) > MAX_CACHE:
+            self._read_cache.clear()
         self._read_cache[key] = value
         return value
 
     def set(self, key, value):
+        if len(self._write_cache) > MAX_CACHE:
+            self.flush()
         self._write_cache[key] = value
 
-    def close(self, namespace):
+    def flush(self):
+        batch = WriteBatch()
+        for key, value in self._write_cache.iteritems():
+            batch.Put(key, dumps(value))
+        self.ldb.Write(batch)
+        self._write_cache = {}
+
+    def close(self, uri, namespace):
         meta = {}
         for dim, subdict in self.meta.iteritems():
             meta[dim] = {}
             for key, value in self.meta[dim].iteritems():
                 meta[dim][key] = list(value)
 
-        db_path = path.join(base_path, namespace, 'meta')
+        db_path = path.join(uri, namespace, 'meta')
         with open(db_path, 'w') as fh:
             dump(meta, fh)
 
-        batch = WriteBatch()
-        for key, value in self._write_cache.iteritems():
-            batch.Put(key, dumps(value))
-        self.ldb.Write(batch)
+        self.flush()
 
 
-def close_all_db():
-    for name, db in all_db.iteritems():
-        db.close(name)
+def get_db(uri, name, backend=LevelDBBackend):
 
-def get_db(namespace):
-    if namespace in all_db:
-        return all_db[namespace]
-
-    db_path = path.join(base_path, namespace)
-
-    if not path.exists(db_path):
+    db_path = path.join(uri, name)
+    if not path.exists(db_path): #TODO put this in __init__ of backend
         mkdir(db_path)
 
     ldb = LevelDB(path.join(db_path, 'data'))
-
     meta_path = path.join(db_path, 'meta')
     if path.exists(meta_path):
         with open(meta_path) as fh:
@@ -76,15 +79,17 @@ def get_db(namespace):
         meta = {}
 
     db = LevelDBBackend(ldb, meta)
-    all_db[namespace] = db
     return db
 
 
 @contextmanager
-def connect(data_path):
-    global base_path
-    base_path = data_path
-
+def connect(uri, backend=None):
+    for name, spc in space.SPACES.iteritems():
+        db = get_db(uri, name, backend=backend)
+        spc._db = db #TODO put this in __init__ of backend
+        for dim in spc._dimensions.itervalues():
+            dim._db = db
     yield
+    for name, spc in space.SPACES.iteritems():
+        spc._db.close(uri, name)
 
-    close_all_db()

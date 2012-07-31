@@ -5,7 +5,9 @@ import common
 import dimension
 import measure
 
-class MetaModel(type):
+SPACES = {}
+
+class MetaSpace(type):
 
     def __new__(cls, name, bases, attrs):
         dimensions = {}
@@ -27,7 +29,6 @@ class MetaModel(type):
             if isinstance(v, dimension.Dimension):
                 dimensions[k] = v
                 v._name = k
-                v._space_name = name
 
             # Collect measures
             if isinstance(v, measure.Measure):
@@ -37,14 +38,21 @@ class MetaModel(type):
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
 
-        model = super(MetaModel, cls).__new__(cls, name, bases, attrs)
+        spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
-        return model
+        if bases:
+            SPACES[attrs['_name']] = spc
+
+        for dim in dimensions.itervalues():
+            dim._space = spc
+
+        return spc
 
 
 class Space:
 
-    __metaclass__ = MetaModel
+    __metaclass__ = MetaSpace
+    _db = None
 
     @classmethod
     def source(cls):
@@ -57,7 +65,6 @@ class Space:
 
     @classmethod
     def load(cls, points):
-        db = common.get_db(cls._name)
         for point in points:
 
             for name, dim in cls._dimensions.iteritems():
@@ -68,13 +75,12 @@ class Space:
 
     @classmethod
     def increment(cls, coords, point):
-        db = common.get_db(cls._name)
         key = cls.serialize(coords)
-        values = db.get(key)
+        values = cls._db.get(key)
         for name, measure in cls._measures.iteritems():
             values[name] = measure.increment(values[name], point[name])
 
-        db.set(key, values)
+        cls._db.set(key, values)
 
     @classmethod
     def serialize(cls, coords):
@@ -82,9 +88,8 @@ class Space:
 
     @classmethod
     def fetch(cls, **point):
-        db = common.get_db(cls._name)
         key = cls.serialize(
             tuple(point.get(name, []) for name in cls._dimensions)
             )
-        return db.get(key)
+        return cls._db.get(key)
 

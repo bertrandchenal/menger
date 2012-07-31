@@ -12,27 +12,25 @@ class Tree(Dimension):
 
     def __init__(self, label):
         self.label = label
+        self._db = None
 
     def aggregates(self, coord):
         for i in xrange(len(coord) + 1):
             yield coord[:i]
 
     def drill(self, coord=[]):
-        db = common.get_db(self._space_name)
-        for res in db.meta[self._name][self.serialize(coord)]:
+        for res in self._db.meta[self._name][self.serialize(coord)]:
             yield coord + [res]
 
     def serialize(self, coord):
         return dumps(coord)
 
     def store_coordinate(self, coord):
-        db = common.get_db(self._space_name)
         for pos, item in enumerate(coord):
-            coord = self.serialize(coord[:pos])
-            db.meta[self._name][coord].add(item)
+            prefix = self.serialize(coord[:pos])
+            self._db.meta[self._name][prefix].add(item)
 
 class Flat(Tree):
-
 
     def aggregates(cls, coord):
         yield ''
