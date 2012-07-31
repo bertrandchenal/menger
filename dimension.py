@@ -6,13 +6,18 @@ import calendar
 import common
 
 class Dimension(object):
-    pass
-
-class Tree(Dimension):
 
     def __init__(self, label):
         self.label = label
         self._db = None
+
+    def serialize(self, coord):
+        return dumps(coord)
+
+
+class Tree(Dimension):
+
+    default = []
 
     def aggregates(self, coord):
         for i in xrange(len(coord) + 1):
@@ -22,9 +27,6 @@ class Tree(Dimension):
         for res in self._db.meta[self._name][self.serialize(coord)]:
             yield coord + [res]
 
-    def serialize(self, coord):
-        return dumps(coord)
-
     def store_coordinate(self, coord):
         for pos, item in enumerate(coord):
             prefix = self.serialize(coord[:pos])
@@ -32,6 +34,14 @@ class Tree(Dimension):
 
 class Flat(Tree):
 
+    default = None
+
     def aggregates(cls, coord):
-        yield ''
+        yield None
         yield coord
+
+    def drill(self):
+        return self._db.meta[self._name][self.serialize(None)]
+
+    def store_coordinate(self, coord):
+        self._db.meta[self._name][self.serialize(None)].add(coord)
