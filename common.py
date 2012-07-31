@@ -16,6 +16,7 @@ class LevelDBBackend(object):
         self.ldb = ldb
         self._read_cache = {}
         self._write_cache = {}
+        # Init self.meta with meta values
         self.meta = defaultdict(lambda: defaultdict(set))
         for dim, subdict in meta.iteritems():
             for key, value in subdict.iteritems():
@@ -48,7 +49,9 @@ class LevelDBBackend(object):
         for key, value in self._write_cache.iteritems():
             batch.Put(key, dumps(value))
         self.ldb.Write(batch)
-        self._write_cache = {}
+        self._write_cache.clear()
+        #XXX instead of clearing everything, store keys in different
+        #dict wrt key length, and then clear dicts with bigger lenght
 
     def close(self, uri, namespace):
         meta = {}

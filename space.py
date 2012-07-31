@@ -46,6 +46,9 @@ class MetaSpace(type):
         for dim in dimensions.itervalues():
             dim._space = spc
 
+        for msr in measures.itervalues():
+            msr._space = spc
+
         return spc
 
 
@@ -85,11 +88,3 @@ class Space:
     @classmethod
     def serialize(cls, coords):
         return dumps(coords)
-
-    @classmethod
-    def fetch(cls, **point):
-        key = cls.serialize(
-            tuple(point.get(name, []) for name in cls._dimensions)
-            )
-        return cls._db.get(key)
-
