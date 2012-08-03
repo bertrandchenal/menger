@@ -3,8 +3,6 @@ from json import dumps, loads
 from collections import defaultdict
 import calendar
 
-import common
-
 class Dimension(object):
 
     def __init__(self, label):

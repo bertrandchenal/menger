@@ -17,7 +17,7 @@ class MetaSpace(type):
             attrs['_name'] = name
 
         for b in bases:
-            if not hasattr(b, '_name'):
+            if not type(b) == cls:
                 continue
             if hasattr(b, '_dimensions'):
                 dimensions.update(b._dimensions)
@@ -37,7 +37,6 @@ class MetaSpace(type):
 
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
-
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
         if bases:
@@ -56,10 +55,6 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
-
-    @classmethod
-    def source(cls):
-        return None
 
     @classmethod
     def aggregates(cls, point):

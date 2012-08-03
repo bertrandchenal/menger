@@ -1,4 +1,5 @@
-from os import path, mkdir
+import errno
+from os import path, makedirs
 from json import loads, dumps, dump, load
 from collections import defaultdict
 from contextlib import contextmanager
@@ -70,8 +71,11 @@ class LevelDBBackend(object):
 def get_db(uri, name, backend=LevelDBBackend):
 
     db_path = path.join(uri, name)
-    if not path.exists(db_path): #TODO put this in __init__ of backend
-        mkdir(db_path)
+    try:
+        makedirs(db_path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
 
     ldb = LevelDB(path.join(db_path, 'data'))
     meta_path = path.join(db_path, 'meta')
