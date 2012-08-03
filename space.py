@@ -88,3 +88,15 @@ class Space:
     @classmethod
     def serialize(cls, coords):
         return dumps(coords)
+
+    @classmethod
+    def fetch(self, *measures, **point):
+        key = self.serialize(
+            [point.get(name, dim.default) \
+                      for name, dim in self._dimensions.iteritems()
+            ])
+        values = self._db.get(key)
+        if len(measures) == 1:
+            return values[measures[0]]
+        return tuple(values[m] for m in measures)
+
