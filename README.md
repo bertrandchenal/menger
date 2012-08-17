@@ -9,7 +9,7 @@ combination of possible query. So when a new data point like this is
 added:
 
     :::python
-    {'date': ['2012', '8', '17'], 'author': Bill", 'nb_words': 523}
+    {'date': ['2012', '8', '17'], 'author': "Bill", 'nb_words': 523}
 
 Eight counters are incremented:
 
