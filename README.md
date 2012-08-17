@@ -10,7 +10,7 @@ added:
 
     :::python
     {'date': ['2012', '8', '17'], 'author': Bill", 'nb_words': 523}
-    
+
 Eight counters are incremented:
 
     :::python
@@ -29,67 +29,63 @@ Each counter is stored in a LevelDB database.
 
 ## Example
 
-Let's say we want to collect statistics about length of blog posts. we
-start by creating a Space class:
-
+Let's say we want to collect statistics about length of blog posts. We
+start by creating a `Post` class that inherit from `Space`:
 
     :::python
     class Post(Space):
 
         date = dimension.Tree('Category')
         author = dimension.Flat('Category')
-        nb_words = measure.Sum('Number')
+        nb_words = measure.Sum('Number of Words')
+        nb_typos = measure.Sum('Number of Typos')
+
+A space class is made of one or several dimensions and one or several
+measures.
 
 The `load` method allows to store data points:
 
     :::python
     Post.load([
-        {'date': ['2012', '8', '17'], 'author': Bill", 'nb_words': 523},
-        {'date': ['2012', '7', '29'], 'author': John", 'nb_words': 148},
+        {'date': ['2012', '7', '26'], 'author': 'John', 'nb_words': 148, 'nb_typos': 1},
+        {'date': ['2012', '8', '7'], 'author': 'John', 'nb_words': 34, 'nb_typos': 0},
+        {'date': ['2012', '8', '9'], 'author': 'Bill', 'nb_words': 523, 'nb_typos': 2},
         ])
 
-We can now retrieve data with fetch:
+We can now retrieve data with `fetch`:
 
     :::python
-    Post.fetch('nb_words') # returns 671
-    Post.fetch('nb_words', author='Bill') # returns 523
-    Post.fetch('nb_words', author='Bill', date=['2012', '8']) # returns 523
+    Post.fetch('nb_words') # prints 705 (148+34+523)
+    Post.fetch('nb_words', author='Bill') # prints 523
+    Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints 523
 
-Or drill the dimensions:
+Or `drill` the dimensions:
 
     :::python
     Post.date.drill(['2012']) # yields ['2012', '7'] and ['2012', '8']
 
-
-Full listing:
+Full code listing:
 
     :::python
     from lattice import Space, dimension, measure
     from lattice.common import connect
-    
+
     class Post(Space):
-    
+
         date = dimension.Tree('Category')
         author = dimension.Flat('Category')
-        nb_words = measure.Sum('Number')
-    
-    
+        nb_words = measure.Sum('Number of Words')
+        nb_typos = measure.Sum('Number of Typos')
+
     with connect('db/Post'):
         Post.load([
-                {
-                    'date': ['2012', '8', '17'],
-                    'author': "Bill",
-                    'nb_words': 523
-                    },
-                {
-                    'date': ['2012', '7', '29'],
-                    'author': "John",
-                    'nb_words': 148
-                    },
-                ])
-    
-        print Post.fetch('nb_words')
-        print Post.fetch('nb_words', author='Bill')
-        print Post.fetch('nb_words', author='Bill', date=['2012', '8'])
-    
+            {'date': ['2012', '7', '26'], 'author': 'John', 'nb_words': 148, 'nb_typos': 1},
+            {'date': ['2012', '8', '7'], 'author': 'John', 'nb_words': 34, 'nb_typos': 0},
+            {'date': ['2012', '8', '9'], 'author': 'Bill', 'nb_words': 523, 'nb_typos': 2},
+            ])
+
+        print Post.fetch('nb_words') # prints 705 (148+34+523)
+        print Post.fetch('nb_words', author='Bill') # prints 523
+        print Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints (148, 1)
+
         print list(Post.date.drill(['2012']))
