@@ -57,7 +57,7 @@ We can now retrieve data with `fetch`:
     :::python
     Post.fetch('nb_words') # prints 705 (148+34+523)
     Post.fetch('nb_words', author='Bill') # prints 523
-    Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints 523
+    Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints (148, 1)
 
 Or `drill` the dimensions:
 
