@@ -11,7 +11,7 @@ added:
     :::python
     {'date': ['2012', '8', '17'], 'author': "Bill", 'nb_words': 523}
 
-eight counters (or indices) are incremented:
+eight counters (or indices) are updated:
 
     :::python
     ([], None)
@@ -45,7 +45,7 @@ measures.
 
 Measures are caracteristics of the class that can be averaged, or compared
 through all objects. Dimensions are caracteristics of the class that can 
-act as categories (classes) when computing a measure''s aggregated value.
+act as categories when computing a measure's aggregated value.
 
 The `load` method allows to store data points (records):
 
