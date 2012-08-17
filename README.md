@@ -1,17 +1,17 @@
 
 # Lattice
 
-Lattice is an ISC licensed statistics storage.
+Lattice is an ORM-like, ISC-licensed statistics storage.
 
 Lattice is designed to receive a flow of data as input and provide
 live statistics. It works by pre-computing statistics for each
-combination of possible query. So when a new data point like this is
+combination of possible query. So when a record like the following is
 added:
 
     :::python
     {'date': ['2012', '8', '17'], 'author': "Bill", 'nb_words': 523}
 
-Eight counters are incremented:
+eight counters (or indices) are incremented:
 
     :::python
     ([], None)
@@ -29,8 +29,8 @@ Each counter is stored in a LevelDB database.
 
 ## Example
 
-Let's say we want to collect statistics about length of blog posts. We
-start by creating a `Post` class that inherit from `Space`:
+Let's say we want to collect statistics about the length of blog posts. We
+start by creating a `Post` class that inherits from  Lattice's `Space` class:
 
     :::python
     class Post(Space):
@@ -40,10 +40,14 @@ start by creating a `Post` class that inherit from `Space`:
         nb_words = measure.Sum('Number of Words')
         nb_typos = measure.Sum('Number of Typos')
 
-A space class is made of one or several dimensions and one or several
+A `Space` class comprises one or several dimensions and one or several
 measures.
 
-The `load` method allows to store data points:
+Measures are caracteristics of the class that can be averaged, or compared
+through all objects. Dimensions are caracteristics of the class that can 
+act as categories (classes) when computing a measure''s aggregated value.
+
+The `load` method allows to store data points (records):
 
     :::python
     Post.load([
@@ -52,14 +56,14 @@ The `load` method allows to store data points:
         {'date': ['2012', '8', '9'], 'author': 'Bill', 'nb_words': 523, 'nb_typos': 2},
         ])
 
-We can now retrieve data with `fetch`:
+We can now retrieve aggregated measures with `fetch`:
 
     :::python
     Post.fetch('nb_words') # prints 705 (148+34+523)
     Post.fetch('nb_words', author='Bill') # prints 523
     Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints (148, 1)
 
-Or `drill` the dimensions:
+Or `drill` the dimensions (i.e. get subcategories of a dimension):
 
     :::python
     Post.date.drill(['2012']) # yields ['2012', '7'] and ['2012', '8']
