@@ -8,12 +8,14 @@ from distutils.core import setup
 
 setup(name='Lattice',
       version='1.0',
-      description='Minimal BI',
+      description='Statistics storage',
+      long_description=open('README.md').read(),
       author='Bertrand Chenal',
       author_email='bertrandchenal@gmail.com',
       url='https://bitbucket.org/bertrandchenal/lattice',
       packages=['lattice'],
       requires=['leveldb'],
+      license='ISC',
       classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Developers',
