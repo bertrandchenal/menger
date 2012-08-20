@@ -59,8 +59,8 @@ The `load` method allows to store data points (records):
 We can now retrieve aggregated measures with `fetch`:
 
     :::python
-    Post.fetch('nb_words') # prints 705 (148+34+523)
-    Post.fetch('nb_words', author='Bill') # prints 523
+    Post.nb_words.fetch() # prints 705 (148+34+523)
+    Post.nb_words.fetch(author='Bill') # prints 523
     Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints (148, 1)
 
 Or `drill` the dimensions (i.e. get subcategories of a dimension):

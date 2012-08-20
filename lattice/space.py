@@ -1,6 +1,8 @@
+from copy import copy
 from itertools import product, izip, imap
 from collections import namedtuple
 from json import dumps
+
 import common
 import dimension
 import measure
@@ -10,9 +12,6 @@ SPACES = {}
 class MetaSpace(type):
 
     def __new__(cls, name, bases, attrs):
-        dimensions = {}
-        measures = {}
-
         if not '_name' in attrs:
             attrs['_name'] = name
 
@@ -20,10 +19,15 @@ class MetaSpace(type):
             if not type(b) == cls:
                 continue
             if hasattr(b, '_dimensions'):
-                dimensions.update(b._dimensions)
-            if hasattr(b, '_measures'):
-                measures.update(b._measures)
+                for name, dim in b._dimensions.iteritems():
+                    attrs[name] = copy(dim)
 
+            if hasattr(b, '_measures'):
+                for name, msr in b._measures.iteritems():
+                    attrs[name] = copy(msr)
+
+        dimensions = {}
+        measures = {}
         for k, v in attrs.iteritems():
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
@@ -39,14 +43,11 @@ class MetaSpace(type):
         attrs['_measures'] = measures
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
+        for msr in measures.itervalues():
+            msr._spc = spc
+
         if bases:
             SPACES[attrs['_name']] = spc
-
-        for dim in dimensions.itervalues():
-            dim._space = spc
-
-        for msr in measures.itervalues():
-            msr._space = spc
 
         return spc
 
@@ -55,6 +56,14 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
+
+    @classmethod
+    def set_db(cls, db):
+        cls._db = db
+        for dim in cls._dimensions.itervalues():
+            dim._db = db
+        for msr in cls._measures.itervalues():
+            msr._db = db
 
     @classmethod
     def aggregates(cls, point):
@@ -81,17 +90,19 @@ class Space:
         cls._db.set(key, values)
 
     @classmethod
-    def serialize(cls, coords):
-        return dumps(coords)
+    def key(cls, point):
+        return cls.serialize([
+                point.get(name, dim.default) \
+                    for name, dim in cls._dimensions.iteritems()
+                ])
 
     @classmethod
-    def fetch(self, *measures, **point):
-        key = self.serialize(
-            [point.get(name, dim.default) \
-                      for name, dim in self._dimensions.iteritems()
-            ])
-        values = self._db.get(key)
+    def serialize(cls, point, fill_default=True):
+        return dumps(point)
+
+    @classmethod
+    def fetch(cls, *measures, **point):
         if len(measures) == 1:
-            return values[measures[0]]
-        return tuple(values[m] for m in measures)
+            return cls._measures[measures[0]].fetch(**point)
+        return tuple(cls._measures[m].fetch(**point) for m in measures)
 

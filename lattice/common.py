@@ -93,9 +93,7 @@ def get_db(uri, name, backend=LevelDBBackend):
 def connect(uri, backend=None):
     for name, spc in space.SPACES.iteritems():
         db = get_db(uri, name, backend=backend)
-        spc._db = db #TODO put this in __init__ of backend
-        for dim in spc._dimensions.itervalues():
-            dim._db = db
+        spc.set_db(db)
     yield
     for name, spc in space.SPACES.iteritems():
         spc._db.close(uri, name)
