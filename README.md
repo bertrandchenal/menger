@@ -88,8 +88,8 @@ Full code listing:
             {'date': ['2012', '8', '9'], 'author': 'Bill', 'nb_words': 523, 'nb_typos': 2},
             ])
 
-        print Post.fetch('nb_words') # prints 705 (148+34+523)
-        print Post.fetch('nb_words', author='Bill') # prints 523
+        print Post.nb_words.fetch() # prints 705 (148+34+523)
+        print Post.nb_words.fetch(author='Bill') # prints 523
         print Post.fetch('nb_words', 'nb_typos', author='John', date=['2012', '7']) # prints (148, 1)
 
         print list(Post.date.drill(['2012']))
