@@ -4,7 +4,7 @@ from shutil import rmtree
 from string import letters
 
 
-from lattice import measure, dimension, Space, common
+from menger import measure, dimension, Space, common
 
 db_path = 'test-db'
 

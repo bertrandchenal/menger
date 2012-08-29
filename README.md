@@ -1,9 +1,9 @@
 
-# Lattice
+# Menger
 
-Lattice is an ORM-like, ISC-licensed statistics storage.
+Menger is an ORM-like, ISC-licensed statistics storage.
 
-Lattice is designed to receive a flow of data as input and provide
+Menger is designed to receive a flow of data as input and provide
 live statistics. It works by pre-computing statistics for each
 combination of possible query. So when a record like the following is
 added:
@@ -30,7 +30,7 @@ Each counter is stored in a LevelDB database.
 ## Example
 
 Let's say we want to collect statistics about the length of blog posts. We
-start by creating a `Post` class that inherits from  Lattice's `Space` class:
+start by creating a `Post` class that inherits from Menger's `Space` class:
 
     :::python
     class Post(Space):
@@ -71,8 +71,8 @@ Or `drill` the dimensions (i.e. get subcategories of a dimension):
 Full code listing:
 
     :::python
-    from lattice import Space, dimension, measure
-    from lattice.common import connect
+    from menger import Space, dimension, measure
+    from menger.common import connect
 
     class Post(Space):
 

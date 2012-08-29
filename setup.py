@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 
-#This file is part of Lattice.  The COPYRIGHT file at the top level of
+#This file is part of Menger. The COPYRIGHT file at the top level of
 #this repository contains the full copyright notices and license
 #terms.
 
 from distutils.core import setup
 
-setup(name='Lattice',
+setup(name='Menger',
       version='1.0',
       description='Statistics storage',
       long_description=open('README.md').read(),
       author='Bertrand Chenal',
       author_email='bertrandchenal@gmail.com',
-      url='https://bitbucket.org/bertrandchenal/lattice',
-      packages=['lattice'],
+      url='https://bitbucket.org/bertrandchenal/menger',
+      packages=['menger'],
       requires=['leveldb'],
       license='ISC',
       classifiers=[
