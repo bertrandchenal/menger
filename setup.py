@@ -7,9 +7,8 @@
 from distutils.core import setup
 
 setup(name='Menger',
-      version='1.0',
+      version='1.1',
       description='Statistics storage',
-      long_description=open('README.md').read(),
       author='Bertrand Chenal',
       author_email='bertrandchenal@gmail.com',
       url='https://bitbucket.org/bertrandchenal/menger',

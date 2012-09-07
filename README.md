@@ -24,7 +24,7 @@ eight counters (or indices) are updated:
     (['2012', '8', '17'], 'Bill')
 
 
-Each counter is stored in a LevelDB database.
+Each counter is stored in the database (LevelDB or Sqlite).
 
 
 ## Example
@@ -81,7 +81,7 @@ Full code listing:
         nb_words = measure.Sum('Number of Words')
         nb_typos = measure.Sum('Number of Typos')
 
-    with connect('db/Post'):
+    with connect('db/Post', backend='sqlite'): # available backends: 'sqlite' or 'leveldb'
         Post.load([
             {'date': ['2012', '7', '26'], 'author': 'John', 'nb_words': 148, 'nb_typos': 1},
             {'date': ['2012', '8', '7'], 'author': 'John', 'nb_words': 34, 'nb_typos': 0},

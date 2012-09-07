@@ -1,27 +1,27 @@
 import errno
-from os import path, makedirs
+import os
 from json import loads, dumps, dump, load
 from collections import defaultdict
 from contextlib import contextmanager
-from leveldb import LevelDB, WriteBatch
+import sqlite3
+try:
+    from leveldb import LevelDB, WriteBatch
+except:
+    pass
+
 
 import space
 
 
-MAX_CACHE = 10000
+MAX_CACHE = 10**4
 
 
-class LevelDBBackend(object):
+class Backend(object):
 
-    def __init__(self, ldb, meta):
-        self.ldb = ldb
+    def __init__(self, meta):
         self._read_cache = {}
         self._write_cache = {}
-        # Init self.meta with meta values
-        self.meta = defaultdict(lambda: defaultdict(set))
-        for dim, subdict in meta.iteritems():
-            for key, value in subdict.iteritems():
-                self.meta[dim][key].update(value)
+        self.meta = meta
 
     def get(self, key):
         if key in self._write_cache:
@@ -30,9 +30,8 @@ class LevelDBBackend(object):
         if key in self._read_cache:
             return self._read_cache[key]
 
-        try:
-            value = loads(self.ldb.Get(key))
-        except KeyError:
+        value = self.db_get(key)
+        if value is None:
             value = defaultdict(float)
 
         if len(self._read_cache) > MAX_CACHE:
@@ -46,55 +45,129 @@ class LevelDBBackend(object):
         self._write_cache[key] = value
 
     def flush(self):
+        self.flush_write_cache()
+        self._write_cache.clear()
+
+    def flush_write_cache(self):
+        raise NotImplementedError()
+
+    def db_get(self, key):
+        raise NotImplementedError()
+
+    def close(self):
+        self.meta.close()
+        self.flush()
+
+
+class LevelDBBackend(Backend):
+
+    def __init__(self, db_path, meta):
+        self.ldb = LevelDB(db_path)
+        super(LevelDBBackend, self).__init__(meta)
+
+    def db_get(self, key):
+        try:
+            return loads(self.ldb.Get(key))
+        except KeyError:
+            return None
+
+    def flush_write_cache(self):
         batch = WriteBatch()
         for key, value in self._write_cache.iteritems():
             batch.Put(key, dumps(value))
         self.ldb.Write(batch)
-        self._write_cache.clear()
         #XXX instead of clearing everything, store keys in different
         #dict wrt key length, and then clear dicts with bigger lenght
 
-    def close(self, uri, namespace):
-        meta = {}
-        for dim, subdict in self.meta.iteritems():
-            meta[dim] = {}
-            for key, value in self.meta[dim].iteritems():
-                meta[dim][key] = list(value)
+class SqliteBackend(Backend):
 
-        db_path = path.join(uri, namespace, 'meta')
-        with open(db_path, 'w') as fh:
-            dump(meta, fh)
+    def __init__(self, db_path, meta):
+        db_file = db_path + 'sqlite'
+        self.connection = sqlite3.connect(db_file)
+        self.cursor = self.connection.cursor()
+        self.cursor.execute('CREATE TABLE IF NOT EXISTS data (' \
+            'key TEXT,' \
+            'value TEXT,' \
+            'PRIMARY KEY(key))')
+        super(SqliteBackend, self).__init__(meta)
 
-        self.flush()
+    def db_get(self, key):
+        self.cursor.execute('SELECT value FROM data WHERE key = ?', (key,))
+        res = self.cursor.fetchone()
+        if res is None:
+            return None
+        return loads(res[0])
+
+    def flush_write_cache(self):
+        all_values = (
+            (k, dumps(v)) for k, v in self._write_cache.iteritems()
+            )
+        self.cursor.executemany('INSERT OR REPLACE into data (key, value)'\
+                                    ' VALUES (?, ?)', all_values);
+        # self.connection.commit()
+
+    def close(self):
+        super(SqliteBackend, self).close()
+        self.connection.commit()
 
 
-def get_db(uri, name, backend=LevelDBBackend):
+class MetaData(object):
 
-    db_path = path.join(uri, name)
+    def __init__(self, path):
+        self.path = path
+        if os.path.exists(path):
+            with open(path) as fh:
+                disk_data = load(fh)
+        else:
+            disk_data = {}
+
+        self.data = defaultdict(lambda: defaultdict(set))
+        for dim, subdict in disk_data.iteritems():
+            for key, value in subdict.iteritems():
+                self.data[dim][key].update(value)
+
+    def close(self):
+        disk_data = {}
+        for dim, subdict in self.data.iteritems():
+            disk_data[dim] = {}
+            for key, value in self.data[dim].iteritems():
+                disk_data[dim][key] = list(value)
+
+        with open(self.path, 'w') as fh:
+            dump(disk_data, fh)
+
+    def __getitem__(self, name):
+        return self.data[name]
+
+
+def get_db(uri, name, backend):
+
+    data_path = os.path.join(uri, name)
     try:
-        makedirs(db_path)
+        os.makedirs(data_path)
     except OSError as e:
         if e.errno != errno.EEXIST:
             raise
 
-    ldb = LevelDB(path.join(db_path, 'data'))
-    meta_path = path.join(db_path, 'meta')
-    if path.exists(meta_path):
-        with open(meta_path) as fh:
-            meta = load(fh)
-    else:
-        meta = {}
+    meta_path = os.path.join(data_path, 'meta')
+    db_path = os.path.join(data_path, 'db')
 
-    db = LevelDBBackend(ldb, meta)
+    meta = MetaData(meta_path)
+    if backend == 'sqlite':
+        db = SqliteBackend(db_path, meta)
+    elif backend ==  'leveldb':
+        db = LevelDBBackend(db_path, meta)
+    else:
+        raise Exception('Backend %s not known' % backend)
     return db
 
 
 @contextmanager
-def connect(uri, backend=None):
+def connect(uri, backend='leveldb'):
     for name, spc in space.SPACES.iteritems():
         db = get_db(uri, name, backend=backend)
         spc.set_db(db)
     yield
     for name, spc in space.SPACES.iteritems():
-        spc._db.close(uri, name)
+        spc._db.close()
 

@@ -44,14 +44,14 @@ def test_data(nb):
                'total': 7,
                }
 
-def main():
+def main(backend):
     # Decrement max_cache to trigger the limit quicker
-    common.MAX_CACHE = 10
+    common.MAX_CACHE = 100
 
     if os.path.exists(db_path):
         rmtree(db_path)
 
-    with common.connect(db_path):
+    with common.connect(db_path, backend):
         Item.load(item_data*50)
         assert list(Item.category.drill(['A'])) == [['A', 'B']]
         assert list(Item.category.drill(['A', 'B'])) == [
@@ -61,26 +61,35 @@ def main():
         assert list(Item.category.drill(['A', 'B', 'C'])) == []
         assert Item.total.fetch(category=['A']) == (15 + 9) * 50
 
-    with common.connect(db_path):
+    with common.connect(db_path, backend):
         Test.load([{'category': ['A', 'B', 'C'],
                'name': 'test',
                'count': 1,
                'total': 7,
                }])
-    with common.connect(db_path):
+
+    with common.connect(db_path, backend):
         # Force usage of read_cache and Use Space.fetch instead of
         # Measure.fetch
         assert Test.total.fetch(category=['A', 'B', 'C'], name='test') \
             == Test.fetch('total', category=['A', 'B', 'C'], name='test')
 
         # Force cache invalidation
-        Test.load(test_data(common.MAX_CACHE + 5))
-        Test.name.drill()
-
+        nb_items = common.MAX_CACHE * 10
+        Test.load(test_data(nb_items))
         assert Test.fetch('total', 'count', category=['A']) == (
-            7 * (common.MAX_CACHE + 5 + 1.0),
-            common.MAX_CACHE + 5 + 1.0
+            7 * (nb_items + 1),
+            nb_items + 1
             )
 
 if __name__ == '__main__':
-    main()
+    import time
+    print 'test with leveldb'
+    t = time.clock()
+    main('leveldb')
+    print ' done in %s sec' % (time.clock() - t)
+
+    print 'test with sqlite'
+    t = time.clock()
+    main('sqlite')
+    print ' done in %s sec' % (time.clock() - t)
