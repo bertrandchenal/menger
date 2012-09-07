@@ -163,7 +163,7 @@ def get_db(uri, name, backend):
 
 
 @contextmanager
-def connect(uri, backend='leveldb'):
+def connect(uri, backend='sqlite'):
     for name, spc in space.SPACES.iteritems():
         db = get_db(uri, name, backend=backend)
         spc.set_db(db)
