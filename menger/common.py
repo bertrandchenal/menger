@@ -2,10 +2,13 @@ import errno
 import os
 from json import loads, dumps, dump, load
 from collections import defaultdict
+from itertools import chain
 from contextlib import contextmanager
+from itertools import repeat
 import sqlite3
+
 try:
-    from leveldb import LevelDB, WriteBatch
+    import psycopg2
 except:
     pass
 
@@ -13,161 +16,106 @@ except:
 import space
 
 
-MAX_CACHE = 10**4
 
+class SqliteBackend():
 
-class Backend(object):
-
-    def __init__(self, meta):
-        self._read_cache = {}
-        self._write_cache = {}
-        self.meta = meta
-
-    def get(self, key):
-        if key in self._write_cache:
-            return self._write_cache[key]
-
-        if key in self._read_cache:
-            return self._read_cache[key]
-
-        value = self.db_get(key)
-        if value is None:
-            value = defaultdict(float)
-
-        if len(self._read_cache) > MAX_CACHE:
-            self._read_cache.clear()
-        self._read_cache[key] = value
-        return value
-
-    def set(self, key, value):
-        if len(self._write_cache) > MAX_CACHE:
-            self.flush()
-        self._write_cache[key] = value
-
-    def flush(self):
-        self.flush_write_cache()
-        self._write_cache.clear()
-
-    def flush_write_cache(self):
-        raise NotImplementedError()
-
-    def db_get(self, key):
-        raise NotImplementedError()
-
-    def close(self):
-        self.meta.close()
-        self.flush()
-
-
-class LevelDBBackend(Backend):
-
-    def __init__(self, db_path, meta):
-        self.ldb = LevelDB(db_path)
-        super(LevelDBBackend, self).__init__(meta)
-
-    def db_get(self, key):
-        try:
-            return loads(self.ldb.Get(key))
-        except KeyError:
-            return None
-
-    def flush_write_cache(self):
-        batch = WriteBatch()
-        for key, value in self._write_cache.iteritems():
-            batch.Put(key, dumps(value))
-        self.ldb.Write(batch)
-        #XXX instead of clearing everything, store keys in different
-        #dict wrt key length, and then clear dicts with bigger lenght
-
-class SqliteBackend(Backend):
-
-    def __init__(self, db_path, meta):
-        db_file = db_path + 'sqlite'
-        self.connection = sqlite3.connect(db_file)
+    def __init__(self, path=None):
+        if path is None:
+            self.connection = sqlite3.connect(':memory:')
+        else:
+            self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
-        self.cursor.execute('CREATE TABLE IF NOT EXISTS data (' \
-            'key TEXT,' \
-            'value TEXT,' \
-            'PRIMARY KEY(key))')
-        super(SqliteBackend, self).__init__(meta)
 
-    def db_get(self, key):
-        self.cursor.execute('SELECT value FROM data WHERE key = ?', (key,))
-        res = self.cursor.fetchone()
-        if res is None:
-            return None
-        return loads(res[0])
+    def register(self, space):
+        space.set_db(self)
+        for dim in space._dimensions:
+            name = '%s_%s' % (space._name, dim)
+            self.cursor.execute(
+                'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
+                    'parent INTEGER, name TEXT)' % name)
 
-    def flush_write_cache(self):
-        all_values = (
-            (k, dumps(v)) for k, v in self._write_cache.iteritems()
+        # TODO test dimension type to adapt db Scheme
+        cols = ','.join(chain(
+                ('%s TEXT NOT NULL' % i for i in space._dimensions),
+                ('%s REAL NOT NULL' % i for i in space._measures)
+                ))
+        query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
+        self.cursor.execute(query)
+
+        self.cursor.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on %s (%s)' % (
+                space._name, space._name, ','.join(space._dimensions)
+                )
             )
-        self.cursor.executemany('INSERT OR REPLACE into data (key, value)'\
-                                    ' VALUES (?, ?)', all_values);
-        # self.connection.commit()
 
-    def close(self):
-        super(SqliteBackend, self).close()
+    def load_coordinates(self, dim):
+        name = '%s_%s' % (dim._spc._name, dim._name)
+        return self.cursor.execute('SELECT id, parent, name from %s' % name)
+
+    def create_coordinate(self, dim, name, parent_id):
+        table = "%s_%s" % (dim._spc._name, dim._name)
+        self.cursor.execute(
+            'INSERT into %s (name, parent) VALUES (?, ?)' % table,
+            (name, parent_id)
+            )
+
+        select = 'SELECT id from %s where name %s ? and parent %s ?'
+        parent_op = parent_id is None and 'is' or '='
+        name_op = name is None and 'is' or '='
+
+        res = self.cursor.execute(select % (table, name_op, parent_op), (
+                name, parent_id
+                ))
+        return res.next()[0]
+
+    def get_child_coordinates(self, dim, parent_id):
+        table = "%s_%s" % (dim._spc._name, dim._name)
+        select = 'SELECT name from %s where parent %s ?'
+        parent_op = parent_id is None and 'is' or '='
+
+        res = self.cursor.execute(select % (table, parent_op), (parent_id,))
+        return res
+
+    def get(self, space, key):
+        select = ','.join(space._measures)
+        clause = lambda x: ('%s is ?' if x[1] is None else '%s = ?')
+        where = ' and '.join(map(clause, zip(space._dimensions, key)))
+
+        stm = ('SELECT %s FROM %s WHERE %s' %
+                (select, space._name, where)) % tuple(space._dimensions)
+
+        res = self.cursor.execute(stm, key).fetchall()
+        return res and res[0] or None
+
+    def set(self, space, key_values):
+        # XXX prepare statement ?
+        fields = tuple(chain(space._dimensions, space._measures))
+        values = ','.join('?' for f in fields)
+        fields = ','.join(fields)
+        stm = 'INSERT OR REPLACE INTO %s (%s) values (%s)' % (
+            space._name, fields, values)
+        data = list(key + values for key, values in key_values)
+        self.cursor.executemany(
+            stm, data
+            )
+
+    def commit(self):
         self.connection.commit()
 
 
-class MetaData(object):
-
-    def __init__(self, path):
-        self.path = path
-        if os.path.exists(path):
-            with open(path) as fh:
-                disk_data = load(fh)
-        else:
-            disk_data = {}
-
-        self.data = defaultdict(lambda: defaultdict(set))
-        for dim, subdict in disk_data.iteritems():
-            for key, value in subdict.iteritems():
-                self.data[dim][key].update(value)
-
-    def close(self):
-        disk_data = {}
-        for dim, subdict in self.data.iteritems():
-            disk_data[dim] = {}
-            for key, value in self.data[dim].iteritems():
-                disk_data[dim][key] = list(value)
-
-        with open(self.path, 'w') as fh:
-            dump(disk_data, fh)
-
-    def __getitem__(self, name):
-        return self.data[name]
-
-
-def get_db(uri, name, backend):
-
-    data_path = os.path.join(uri, name)
-    try:
-        os.makedirs(data_path)
-    except OSError as e:
-        if e.errno != errno.EEXIST:
-            raise
-
-    meta_path = os.path.join(data_path, 'meta')
-    db_path = os.path.join(data_path, 'db')
-
-    meta = MetaData(meta_path)
-    if backend == 'sqlite':
-        db = SqliteBackend(db_path, meta)
-    elif backend ==  'leveldb':
-        db = LevelDBBackend(db_path, meta)
+def get_backend(name, uri):
+    if name == 'sqlite':
+        db = SqliteBackend(uri)
     else:
         raise Exception('Backend %s not known' % backend)
     return db
 
 
 @contextmanager
-def connect(uri, backend='sqlite'):
-    for name, spc in space.SPACES.iteritems():
-        db = get_db(uri, name, backend=backend)
-        spc.set_db(db)
+def connect(backend='sqlite', uri=None):
+    backend = get_backend(backend, uri)
+    for spc in space.SPACES.itervalues():
+        backend.register(spc)
     yield
-    for name, spc in space.SPACES.iteritems():
-        spc._db.close()
-
+    for spc in space.SPACES.itervalues():
+        spc.flush()
