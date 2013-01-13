@@ -1,42 +1,24 @@
-import errno
-import os
-from json import loads, dumps, dump, load
-from collections import defaultdict
 from itertools import chain
-from contextlib import contextmanager
-from itertools import repeat
 import sqlite3
-
-try:
-    import psycopg2
-except:
-    pass
-
-
-import space
-
-
 
 class SqliteBackend():
 
-    def __init__(self, path=None):
-        if path is None:
-            self.connection = sqlite3.connect(':memory:')
-        else:
-            self.connection = sqlite3.connect(path)
+    def __init__(self, path):
+        self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
 
     def register(self, space):
         space.set_db(self)
         for dim in space._dimensions:
             name = '%s_%s' % (space._name, dim)
+            # TODO put idx on dim table
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
                     'parent INTEGER, name TEXT)' % name)
 
-        # TODO test dimension type to adapt db Scheme
+        # TODO declare foreign key
         cols = ','.join(chain(
-                ('%s TEXT NOT NULL' % i for i in space._dimensions),
+                ('%s INTEGER NOT NULL' % i for i in space._dimensions),
                 ('%s REAL NOT NULL' % i for i in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
@@ -87,35 +69,17 @@ class SqliteBackend():
         res = self.cursor.execute(stm, key).fetchall()
         return res and res[0] or None
 
-    def set(self, space, key_values):
-        # XXX prepare statement ?
+    def set(self, space, values):
         fields = tuple(chain(space._dimensions, space._measures))
-        values = ','.join('?' for f in fields)
+        val_stm = ','.join('?' for f in fields)
         fields = ','.join(fields)
         stm = 'INSERT OR REPLACE INTO %s (%s) values (%s)' % (
-            space._name, fields, values)
-        data = list(key + values for key, values in key_values)
+            space._name, fields, val_stm)
+
+        data = list(k + v for k, v in values.iteritems())
         self.cursor.executemany(
             stm, data
             )
 
     def commit(self):
         self.connection.commit()
-
-
-def get_backend(name, uri):
-    if name == 'sqlite':
-        db = SqliteBackend(uri)
-    else:
-        raise Exception('Backend %s not known' % backend)
-    return db
-
-
-@contextmanager
-def connect(backend='sqlite', uri=None):
-    backend = get_backend(backend, uri)
-    for spc in space.SPACES.itervalues():
-        backend.register(spc)
-    yield
-    for spc in space.SPACES.itervalues():
-        spc.flush()

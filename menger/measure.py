@@ -5,6 +5,9 @@ class Measure(object):
         self.label = label
         self._db = None
 
+    def set_db(self, db):
+        self._db = db
+
 
 class Sum(Measure):
 

@@ -2,10 +2,7 @@ import os
 from random import sample
 from string import letters
 
-
-from menger import measure, dimension, Space, common
-
-db_path = '/dev/shm/test.db'
+from menger import measure, dimension, Space, backend
 
 class Item(Space):
 
@@ -42,14 +39,11 @@ def test_data(nb):
                'total': 7,
                }
 
-def main(backend):
+def main(uri):
     # Decrement max_cache to trigger the limit quicker
-    common.MAX_CACHE = 100
+    backend.MAX_CACHE = 100
 
-    if os.path.exists(db_path):
-        os.remove(db_path)
-
-    with common.connect():
+    with backend.connect(uri):
         Item.load(item_data*50)
         assert list(Item.category.drill(['A'])) == [['A', 'B']]
         assert list(Item.category.drill(['A', 'B'])) == [
@@ -59,25 +53,42 @@ def main(backend):
         assert list(Item.category.drill(['A', 'B', 'C'])) == []
         assert Item.fetch(category=['A'])['total'] == (15 + 9) * 50
 
-    with common.connect('sqlite', db_path):
+    with backend.connect(uri):
         Test.load([{'category': ['A', 'B', 'C'],
                'name': ['test'],
                'count': 1,
                'total': 7,
                }])
 
-    with common.connect('sqlite', db_path):
+    with backend.connect(uri):
         # Force cache invalidation
-        nb_items = common.MAX_CACHE * 10
+        nb_items = backend.MAX_CACHE * 10
         Test.load(test_data(nb_items))
         res = Test.fetch(category=['A'])
-        assert res['total'] == 7 * (nb_items + 1)
-        assert res['count'] == nb_items + 1
+
+        if uri == 'sqlite:///:memory:':
+            assert res['total'] == 7 * nb_items
+            assert res['count'] == nb_items
+        else:
+            assert res['total'] == 7 * (nb_items + 1)
+            assert res['count'] == nb_items + 1
 
 
 if __name__ == '__main__':
     import time
-    print 'test with sqlite'
-    t = time.clock()
-    main('sqlite')
-    print ' done in %s sec' % (time.clock() - t)
+
+    db_path = '/dev/shm/test.db'
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    uris = (
+        'sqlite:///' + db_path,
+        'postgresql://@/menger',
+        'sqlite:///:memory:',
+        )
+
+    for uri in uris:
+        print 'test with %s' % uri
+        t = time.clock()
+        main(uri)
+        print ' done in %s sec' % (time.clock() - t)

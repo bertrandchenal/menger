@@ -3,7 +3,7 @@ from itertools import product, izip, imap
 from collections import namedtuple
 from json import dumps
 
-import common
+import backend
 import dimension
 import measure
 
@@ -14,6 +14,8 @@ class MetaSpace(type):
     def __new__(cls, name, bases, attrs):
         if not '_name' in attrs:
             attrs['_name'] = name
+
+        attrs['_name'] = attrs['_name'].lower()
 
         for b in bases:
             if not type(b) == cls:
@@ -64,37 +66,39 @@ class Space:
     def set_db(cls, db):
         cls._db = db
         for dim in cls._dimensions.itervalues():
-            dim._db = db
+            dim.set_db(db)
+
         for msr in cls._measures.itervalues():
-            msr._db = db
+            msr.set_db(db)
 
     @classmethod
     def aggregates(cls, point):
         for name, dim in cls._dimensions.iteritems():
-            yield dim.aggregates(point[name])
+            yield dim.aggregates(tuple(point[name]))
 
     @classmethod
     def key(cls, point):
         return tuple(
-            dim.key(point.get(name)) \
+            dim.key(point.get(name, tuple())) \
                 for name, dim in cls._dimensions.iteritems())
 
     @classmethod
     def load(cls, points):
+        points = list(points)
         for point in points:
             for parent_coords in product(*tuple(cls.aggregates(point))):
                 cls.increment(parent_coords, point)
 
     @classmethod
     def flush(cls):
-        cls._db.set(cls, cls._write_cache.iteritems())
+        cls._db.set(cls, cls._write_cache)
         cls._db.commit()
         cls._write_cache.clear()
         cls._read_cache.clear()
 
     @classmethod
     def increment(cls, key, values):
-        if len(cls._write_cache) > common.MAX_CACHE:
+        if len(cls._write_cache) > backend.MAX_CACHE:
             cls.flush()
         old_values = cls.get(key)
         iter_values = (values[msr] for msr in cls._measures)
@@ -107,6 +111,7 @@ class Space:
     @classmethod
     def fetch(cls, **point):
         res = cls.get(cls.key(point))
+
         if res is None:
             res = tuple(0 for x in cls._measures)
         return dict(zip(cls._measures, res))
@@ -120,7 +125,7 @@ class Space:
             return cls._read_cache[key]
 
         values = cls._db.get(cls, key)
-        if len(cls._read_cache) > common.MAX_CACHE: #TODO use lru
+        if len(cls._read_cache) > backend.MAX_CACHE: #TODO use lru
             cls._read_cache.clear()
         cls._read_cache[key] = values
 

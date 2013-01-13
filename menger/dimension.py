@@ -8,32 +8,35 @@ class Dimension(object):
         self._db = None
         self._spc = None
 
+    def set_db(self, db):
+        self._db = db
+        self.serialized = {}
+
 
 class Tree(Dimension):
 
     default = []
 
     def key(self, coord):
-        return self.aggregates(coord)[-1]
-
-    def aggregates(self, coord):
-        if coord is None:
-            coord = tuple()
-        else:
-            coord = tuple(coord)
-
-        coord_ids = self.serialized.get(coord)
-        if coord_ids is not None:
-            return coord_ids
+        coord = tuple(coord)
+        coord_id = self.serialized.get(coord)
+        if coord_id is not None:
+            return coord_id
 
         if not self.serialized:
             self.fill_serialized()
 
-        coord_ids = self.serialized.get(coord)
-        if coord_ids is not None:
-            return coord_ids
+        coord_id = self.serialized.get(coord)
+        if coord_id is not None:
+            return coord_id
 
         return self.add_coordinate(coord)
+
+    def aggregates(self, coord):
+        if coord == tuple():
+            return (self.key(coord),)
+        else:
+            return self.aggregates(coord[:-1]) + (self.key(coord),)
 
     def add_coordinate(self, coord):
         if len(coord) == 0:
@@ -41,13 +44,12 @@ class Tree(Dimension):
             parent_coord_ids = tuple()
         else:
             parent_coord = coord[:-1]
-            parent_coord_ids = self.aggregates(parent_coord)
-            new_id = self._db.create_coordinate(self, coord[-1],
-                    parent_coord_ids[-1])
+            parent_coord_id = self.key(parent_coord)
+            new_id = self._db.create_coordinate(
+                self, coord[-1], parent_coord_id)
 
-        coord_ids = parent_coord_ids + (new_id,)
-        self.serialized[coord] = coord_ids
-        return coord_ids
+        self.serialized[coord] = new_id
+        return new_id
 
     def fill_serialized(self):
         id2name = {}
@@ -62,13 +64,16 @@ class Tree(Dimension):
             for parent, children in level:
                 for child in children:
                     name = id2name[child]
-                    self.serialized[parent + (name,)] = child
-                    new_level.append((child, parent2children[child]))
+                    key = parent + (name,)
+
+                    self.serialized[key[1:]] = child
+                    new_level.append((key, parent2children[child]))
             level = new_level
 
     def drill(self, coord=[]):
         #TODO fill cache
-        for name in self._db.get_child_coordinates(self, self.key(coord)):
+        children = self._db.get_child_coordinates(self, self.key(coord))
+        for name in children:
             yield coord + [str(name[0])] #TODO ugly
 
 
