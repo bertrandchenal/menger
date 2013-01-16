@@ -87,27 +87,25 @@ class PGBackend():
         res = self.cursor.fetchall()
         return res and res[0] or None
 
-    def set(self, space, values):
+    def update(self, space, values):
         # TODO write lock on table
-        # XXX prepare statements ?
-
         set_stm = ','.join('%s = %%s' % m for m in space._measures)
         clause =  ' and '.join('%s = %%s' % d for d in space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
             space._name, set_stm, clause)
 
+        args = (tuple(chain(v, k)) for k, v in values.iteritems())
+        self.cursor.executemany(update_stm, args)
+
+    def insert(self, space, values):
         fields = tuple(chain(space._measures, space._dimensions))
         val_stm = ','.join('%s' for f in fields)
         field_stm = ','.join(fields)
         insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space._name, field_stm, val_stm)
 
-        for k, v in values.iteritems():
-            args = tuple(chain(v, k))
-            self.cursor.execute(update_stm, args)
-            if self.cursor.rowcount == 0:
-                self.cursor.execute(insert_stm, args)
-
+        args = (tuple(chain(v, k)) for k, v in values.iteritems())
+        self.cursor.executemany(insert_stm, args)
 
     def commit(self):
         self.connection.commit()

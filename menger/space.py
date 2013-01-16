@@ -44,7 +44,8 @@ class MetaSpace(type):
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
         attrs['_read_cache'] = {}
-        attrs['_write_cache'] = {}
+        attrs['_insert_cache'] = {}
+        attrs['_update_cache'] = {}
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
@@ -91,22 +92,33 @@ class Space:
 
     @classmethod
     def flush(cls):
-        cls._db.set(cls, cls._write_cache)
+        cls._db.update(cls, cls._update_cache)
+        cls._db.insert(cls, cls._insert_cache)
         cls._db.commit()
-        cls._write_cache.clear()
+        cls._update_cache.clear()
+        cls._insert_cache.clear()
         cls._read_cache.clear()
 
     @classmethod
     def increment(cls, key, values):
-        if len(cls._write_cache) > backend.MAX_CACHE:
-            cls.flush()
         old_values = cls.get(key)
         iter_values = (values[msr] for msr in cls._measures)
+
         if old_values is None:
             new_values = tuple(iter_values)
         else:
             new_values = tuple(x + y for x, y in zip(iter_values, old_values))
-        cls._write_cache[key] = new_values
+
+        if old_values is None or key in cls._insert_cache:
+            if len(cls._insert_cache) > backend.MAX_CACHE:
+                cls.flush()
+                cls._update_cache[key] = new_values #TODO ugly
+            else:
+                cls._insert_cache[key] = new_values
+        else:
+            if len(cls._update_cache) > backend.MAX_CACHE:
+                cls.flush()
+            cls._update_cache[key] = new_values
 
     @classmethod
     def fetch(cls, **point):
@@ -118,8 +130,11 @@ class Space:
 
     @classmethod
     def get(cls, key):
-        if key in cls._write_cache:
-            return cls._write_cache[key]
+        if key in cls._update_cache:
+            return cls._update_cache[key]
+
+        if key in cls._insert_cache:
+            return cls._insert_cache[key]
 
         if key in cls._read_cache:
             return cls._read_cache[key]
@@ -127,7 +142,7 @@ class Space:
         values = cls._db.get(cls, key)
         if len(cls._read_cache) > backend.MAX_CACHE: #TODO use lru
             cls._read_cache.clear()
+
         cls._read_cache[key] = values
 
         return values
-

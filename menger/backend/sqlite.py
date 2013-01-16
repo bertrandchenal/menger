@@ -6,6 +6,7 @@ class SqliteBackend():
     def __init__(self, path):
         self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
+        self.cursor.execute('PRAGMA journal_mode=WAL')
 
     def register(self, space):
         space.set_db(self)
@@ -69,17 +70,24 @@ class SqliteBackend():
         res = self.cursor.execute(stm, key).fetchall()
         return res and res[0] or None
 
-    def set(self, space, values):
-        fields = tuple(chain(space._dimensions, space._measures))
-        val_stm = ','.join('?' for f in fields)
-        fields = ','.join(fields)
-        stm = 'INSERT OR REPLACE INTO %s (%s) values (%s)' % (
-            space._name, fields, val_stm)
+    def update(self, space, values):
+        set_stm = ','.join('%s = ?' % m for m in space._measures)
+        clause =  ' and '.join('%s = ?' % d for d in space._dimensions)
+        update_stm = 'UPDATE %s SET %s WHERE %s' % (
+            space._name, set_stm, clause)
 
-        data = list(k + v for k, v in values.iteritems())
-        self.cursor.executemany(
-            stm, data
-            )
+        args = (tuple(chain(v, k)) for k, v in values.iteritems())
+        self.cursor.executemany(update_stm, args)
+
+    def insert(self, space, values):
+        fields = tuple(chain(space._measures, space._dimensions))
+        val_stm = ','.join('?' for f in fields)
+        field_stm = ','.join(fields)
+        insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
+            space._name, field_stm, val_stm)
+
+        args = (tuple(chain(v, k)) for k, v in values.iteritems())
+        self.cursor.executemany(insert_stm, args)
 
     def commit(self):
         self.connection.commit()
