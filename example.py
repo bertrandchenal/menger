@@ -84,6 +84,8 @@ if __name__ == '__main__':
 
     for uri in uris:
         print 'Test with %s' % uri
-        t = time.clock()
+        t = time.time()
+        c = time.clock()
         main(uri)
-        print ' done in %s sec' % (time.clock() - t)
+        print ' done in %.3s sec (%.3f CPU sec)' % (
+            time.time() - t, (time.clock() - c))
