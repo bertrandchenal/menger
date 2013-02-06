@@ -42,7 +42,6 @@ def connect(uri='sqlite:///:memory:'):
         if host:
             cn_str += "host='%s' " % host
 
-
         backend = PGBackend(cn_str)
 
     elif engine == 'sqlite':
@@ -53,6 +52,8 @@ def connect(uri='sqlite:///:memory:'):
 
     for spc in space.SPACES.itervalues():
         backend.register(spc)
+
     yield
+
     for spc in space.SPACES.itervalues():
         spc.flush()
