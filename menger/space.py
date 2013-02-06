@@ -85,7 +85,6 @@ class Space:
 
     @classmethod
     def load(cls, points):
-        points = list(points)
         for point in points:
             for parent_coords in product(*tuple(cls.aggregates(point))):
                 cls.increment(parent_coords, point)
