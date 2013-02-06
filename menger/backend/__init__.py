@@ -11,6 +11,7 @@ if psycopg2 is None:
 else:
     from postgresql import PGBackend
 
+MAX_CACHE = 1000
 
 @contextmanager
 def connect(uri='sqlite:///:memory:'):
