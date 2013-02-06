@@ -106,7 +106,8 @@ class Space:
         if old_values is None:
             new_values = tuple(iter_values)
         else:
-            new_values = tuple(x + y for x, y in zip(iter_values, old_values))
+            new_values = tuple(m.increment(x, y) for m, x, y in zip(
+                    cls._measures.itervalues(), iter_values, old_values))
 
         if old_values is None or key in cls._insert_cache:
             if len(cls._insert_cache) > backend.MAX_CACHE:
