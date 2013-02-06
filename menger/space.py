@@ -146,3 +146,17 @@ class Space:
         cls._read_cache[key] = values
 
         return values
+
+
+def build_space(data_point, name='Space'):
+    attributes = {}
+
+    for k, v in data_point.iteritems():
+        if isinstance(v, list):
+            attributes[k] = dimension.Tree(k)
+        elif isinstance(v, (int, float)):
+            attributes[k] = measure.Sum(k)
+        else:
+            raise Exception('Unknow type %s (on key %s)' % (type(v), k))
+
+    return type(name, (Space,), attributes)
