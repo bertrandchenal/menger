@@ -110,15 +110,13 @@ class Space:
                     cls._measures.itervalues(), iter_values, old_values))
 
         if old_values is None or key in cls._insert_cache:
+            cls._insert_cache[key] = new_values
             if len(cls._insert_cache) > backend.MAX_CACHE:
                 cls.flush()
-                cls._update_cache[key] = new_values #TODO ugly
-            else:
-                cls._insert_cache[key] = new_values
         else:
+            cls._update_cache[key] = new_values
             if len(cls._update_cache) > backend.MAX_CACHE:
                 cls.flush()
-            cls._update_cache[key] = new_values
 
     @classmethod
     def fetch(cls, **point):
@@ -140,7 +138,7 @@ class Space:
             return cls._read_cache[key]
 
         values = cls._db.get(cls, key)
-        if len(cls._read_cache) > backend.MAX_CACHE: #TODO use lru
+        if len(cls._read_cache) > backend.MAX_CACHE:
             cls._read_cache.clear()
 
         cls._read_cache[key] = values
