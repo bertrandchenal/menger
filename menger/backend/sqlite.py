@@ -1,7 +1,9 @@
 from itertools import chain
 import sqlite3
 
-class SqliteBackend():
+from base import BaseBackend
+
+class SqliteBackend(BaseBackend):
 
     def __init__(self, path):
         self.connection = sqlite3.connect(path)
@@ -12,7 +14,6 @@ class SqliteBackend():
         space.set_db(self)
         for dim in space._dimensions:
             name = '%s_%s' % (space._name, dim)
-            # TODO put idx on dim table
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
                     'parent INTEGER, name TEXT)' % name)
@@ -91,3 +92,8 @@ class SqliteBackend():
 
     def commit(self):
         self.connection.commit()
+
+    def get_columns_info(self, name):
+        stm = 'PRAGMA table_info(%s)' % name
+        self.cursor.execute(stm)
+        return [(l[1], l[2].lower()) for l in self.cursor]

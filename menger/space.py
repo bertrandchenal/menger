@@ -78,9 +78,9 @@ class Space:
             yield dim.aggregates(tuple(point[name]))
 
     @classmethod
-    def key(cls, point):
+    def key(cls, point, create=True):
         return tuple(
-            dim.key(point.get(name, tuple())) \
+            dim.key(point.get(name, tuple()), create=create) \
                 for name, dim in cls._dimensions.iteritems())
 
     @classmethod
@@ -120,7 +120,7 @@ class Space:
 
     @classmethod
     def fetch(cls, **point):
-        res = cls.get(cls.key(point))
+        res = cls.get(cls.key(point, False))
 
         if res is None:
             res = tuple(0 for x in cls._measures)
@@ -146,9 +146,12 @@ class Space:
         return values
 
 
-def build_space(data_point, name='Space'):
-    attributes = {}
+def build_space(data_point, name):
+    """
+    Dynamically create a Space class based on a data point.
+    """
 
+    attributes = {}
     for k, v in data_point.iteritems():
         if isinstance(v, list):
             attributes[k] = dimension.Tree(k)

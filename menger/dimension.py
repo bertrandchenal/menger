@@ -17,7 +17,7 @@ class Tree(Dimension):
 
     default = []
 
-    def key(self, coord):
+    def key(self, coord, create=True):
         coord = tuple(coord)
         coord_id = self.serialized.get(coord)
         if coord_id is not None:
@@ -29,6 +29,9 @@ class Tree(Dimension):
         coord_id = self.serialized.get(coord)
         if coord_id is not None:
             return coord_id
+
+        if not create:
+            return None
 
         return self.add_coordinate(coord)
 

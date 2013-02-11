@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from sqlite import SqliteBackend
 
 try:
@@ -11,10 +10,11 @@ if psycopg2 is None:
 else:
     from postgresql import PGBackend
 
+
 MAX_CACHE = 1000
 
-@contextmanager
-def connect(uri='sqlite:///:memory:'):
+
+def get_backend(uri):
     """
     uri string examples:
 
@@ -23,7 +23,9 @@ def connect(uri='sqlite:///:memory:'):
     postgresql:// scott:tiger@localhost / mydatabase
     postgresql:// user:password@ / dbname
     """
-    from .. import space
+
+    if not (uri.startswith('sqlite://') or uri.startswith('postgresql://')):
+        return SqliteBackend(uri)
 
     engine, other = uri.split('://', 1)
     host, db = other.split('/', 1)
@@ -50,10 +52,4 @@ def connect(uri='sqlite:///:memory:'):
     else:
         raise Exception('Backend %s not known' % backend)
 
-    for spc in space.SPACES.itervalues():
-        backend.register(spc)
-
-    yield
-
-    for spc in space.SPACES.itervalues():
-        spc.flush()
+    return backend

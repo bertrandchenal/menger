@@ -1,7 +1,9 @@
 from itertools import chain
 import psycopg2
 
-class PGBackend():
+from base import BaseBackend
+
+class PGBackend(BaseBackend):
 
     def __init__(self, connection_string):
         self.connection = psycopg2.connect(connection_string)
@@ -24,9 +26,10 @@ class PGBackend():
             if not self.cursor.fetchall():
                 self.cursor.execute(create_idx % (name, name))
 
-        # TODO declare foreign key
         cols = ','.join(chain(
-                ('%s INTEGER NOT NULL' % i for i in space._dimensions),
+                ('%s INTEGER NOT NULL references %s_%s (id)' % (
+                        i, space._name, i
+                        ) for i in space._dimensions),
                 ('%s REAL NOT NULL' % i for i in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
@@ -109,3 +112,9 @@ class PGBackend():
 
     def commit(self):
         self.connection.commit()
+
+    def get_columns_info(self, name):
+        stm = 'SELECT column_name, data_type '\
+            'from information_schema.columns where table_name=%s'
+        self.cursor.execute(stm, (name,))
+        return self.cursor.fetchall()
