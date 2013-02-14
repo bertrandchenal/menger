@@ -1,16 +1,23 @@
-from itertools import chain
+from cStringIO import StringIO
+from itertools import chain, imap
+from sql import SqlBackend
 import psycopg2
 
-from base import BaseBackend
-
-class PGBackend(BaseBackend):
+class PGBackend(SqlBackend):
 
     def __init__(self, connection_string):
+        self.space = None
         self.connection = psycopg2.connect(connection_string)
         self.cursor = self.connection.cursor()
+        self.write_buffer = {}
+        self.read_cache = {}
+
+    def close(self):
+        super(PGBackend, self).close()
+        self.connection.close()
 
     def register(self, space):
-        space.set_db(self)
+        self.space = space
         create_idx = 'CREATE UNIQUE INDEX %s_id_parent_index on %s (id, parent)'
         for dim in space._dimensions:
             name = '%s_%s' % (space._name, dim)
@@ -78,40 +85,59 @@ class PGBackend(BaseBackend):
         self.cursor.execute(select % (table, parent_op), (parent_id,))
         return self.cursor
 
-    def get(self, space, key):
-        select = ','.join(space._measures)
-        clause = lambda x: ('%s is %%s' if x[1] is None else '%s = %%s')
-        where = ' and '.join(map(clause, zip(space._dimensions, key)))
+    def get(self, keys, flushing=False):
+        if not flushing and len(self.read_cache) > self.space.MAX_CACHE:
+            self.flush()
 
-        stm = ('SELECT %s FROM %s WHERE %s' %
-                (select, space._name, where)) % tuple(space._dimensions)
+        select = ','.join(chain(self.space._dimensions, self.space._measures))
+        where_dim = ','.join(self.space._dimensions)
+        where_in_part = ','.join('%s' for d in self.space._dimensions)
+        where_in = ','.join('(%s)' % where_in_part for k in keys \
+                                if k not in self.read_cache)
 
-        self.cursor.execute(stm, key)
-        res = self.cursor.fetchall()
-        return res and res[0] or None
+        stm = ('SELECT %s FROM %s WHERE (%s) IN (%s)' % (
+                select, self.space._name, where_dim, where_in))
 
-    def update(self, space, values):
+        args = tuple(chain(*(k for k in keys if k not in self.read_cache)))
+
+        if len(args) == 0:
+            for k in keys:
+                yield k, self.read_cache[k]
+            return
+
+        self.cursor.execute(stm, args)
+
+        nbd = len(self.space._dimensions)
+        res = self.cursor.fetchmany()
+        while res:
+            for item in res:
+                self.read_cache[item[:nbd]] = item[nbd:]
+            res = self.cursor.fetchmany()
+
+        for k in keys:
+            if k not in self.read_cache:
+                self.read_cache[k] = None
+            yield k, self.read_cache[k]
+
+    def update(self, values):
         # TODO write lock on table
-        set_stm = ','.join('%s = %%s' % m for m in space._measures)
-        clause =  ' and '.join('%s = %%s' % d for d in space._dimensions)
+        set_stm = ','.join('%s = %%s' % m for m in self.space._measures)
+        clause =  ' and '.join('%s = %%s' % d for d in self.space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
-            space._name, set_stm, clause)
+            self.space._name, set_stm, clause)
 
         args = (tuple(chain(v, k)) for k, v in values.iteritems())
         self.cursor.executemany(update_stm, args)
 
-    def insert(self, space, values):
-        fields = tuple(chain(space._measures, space._dimensions))
-        val_stm = ','.join('%s' for f in fields)
-        field_stm = ','.join(fields)
-        insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
-            space._name, field_stm, val_stm)
+    def insert(self, values):
+        fields = tuple(chain(self.space._measures, self.space._dimensions))
 
-        args = (tuple(chain(v, k)) for k, v in values.iteritems())
-        self.cursor.executemany(insert_stm, args)
-
-    def commit(self):
-        self.connection.commit()
+        data = StringIO( '\n'.join(
+                '\t'.join(imap(str, chain(k, v)))
+                for v, k in values.iteritems()
+                ))
+        self.cursor.copy_from(data, self.space._name, columns=fields)
+        data.close()
 
     def get_columns_info(self, name):
         stm = 'SELECT column_name, data_type '\

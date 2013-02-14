@@ -1,17 +1,26 @@
-from itertools import chain
+from itertools import chain, imap
 import sqlite3
 
-from base import BaseBackend
+from sql import SqlBackend
 
-class SqliteBackend(BaseBackend):
+
+class SqliteBackend(SqlBackend):
 
     def __init__(self, path):
+        self.space = None
         self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA journal_mode=WAL')
+        self.write_buffer = {}
+        self.read_cache = {}
+        self.old_read_cache = {}
+
+    def close(self):
+        super(SqliteBackend, self).close()
+        self.connection.close()
 
     def register(self, space):
-        space.set_db(self)
+        self.space = space
         for dim in space._dimensions:
             name = '%s_%s' % (space._name, dim)
             self.cursor.execute(
@@ -33,11 +42,11 @@ class SqliteBackend(BaseBackend):
             )
 
     def load_coordinates(self, dim):
-        name = '%s_%s' % (dim._spc._name, dim._name)
+        name = '%s_%s' % (self.space._name, dim._name)
         return self.cursor.execute('SELECT id, parent, name from %s' % name)
 
     def create_coordinate(self, dim, name, parent_id):
-        table = "%s_%s" % (dim._spc._name, dim._name)
+        table = "%s_%s" % (self.space._name, dim._name)
         self.cursor.execute(
             'INSERT into %s (name, parent) VALUES (?, ?)' % table,
             (name, parent_id)
@@ -53,45 +62,51 @@ class SqliteBackend(BaseBackend):
         return res.next()[0]
 
     def get_child_coordinates(self, dim, parent_id):
-        table = "%s_%s" % (dim._spc._name, dim._name)
+        table = "%s_%s" % (self.space._name, dim._name)
         select = 'SELECT name from %s where parent %s ?'
         parent_op = parent_id is None and 'is' or '='
 
         res = self.cursor.execute(select % (table, parent_op), (parent_id,))
         return res
 
-    def get(self, space, key):
-        select = ','.join(space._measures)
-        clause = lambda x: ('%s is ?' if x[1] is None else '%s = ?')
-        where = ' and '.join(map(clause, zip(space._dimensions, key)))
+    def get(self, keys, flushing=False):
+        if not flushing and len(self.read_cache) > self.space.MAX_CACHE:
+            self.flush()
 
-        stm = ('SELECT %s FROM %s WHERE %s' %
-                (select, space._name, where)) % tuple(space._dimensions)
+        select = ','.join(self.space._measures)
+        clause = lambda x: ('%s is ?' if x[1] is None else '%s = ?') % x[0]
+        stm = 'SELECT %s FROM %s WHERE ' % (select, self.space._name)
 
-        res = self.cursor.execute(stm, key).fetchall()
-        return res and res[0] or None
+        for key in keys:
+            if key in self.read_cache:
+                yield key, self.read_cache[key]
+                continue
 
-    def update(self, space, values):
-        set_stm = ','.join('%s = ?' % m for m in space._measures)
-        clause =  ' and '.join('%s = ?' % d for d in space._dimensions)
+            where = ' and '.join(imap(clause, zip(self.space._dimensions, key)))
+            values = self.cursor.execute(stm + where, key).fetchone()
+
+            self.read_cache[key] = values
+            yield key, values
+
+    def update(self, values):
+        set_stm = ','.join('%s = ?' % m for m in self.space._measures)
+        clause =  ' and '.join('%s = ?' % d for d in self.space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
-            space._name, set_stm, clause)
+            self.space._name, set_stm, clause)
 
         args = (tuple(chain(v, k)) for k, v in values.iteritems())
         self.cursor.executemany(update_stm, args)
 
-    def insert(self, space, values):
-        fields = tuple(chain(space._measures, space._dimensions))
+    def insert(self, values):
+        fields = tuple(chain(self.space._measures, self.space._dimensions))
         val_stm = ','.join('?' for f in fields)
         field_stm = ','.join(fields)
         insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
-            space._name, field_stm, val_stm)
+            self.space._name, field_stm, val_stm)
 
         args = (tuple(chain(v, k)) for k, v in values.iteritems())
         self.cursor.executemany(insert_stm, args)
 
-    def commit(self):
-        self.connection.commit()
 
     def get_columns_info(self, name):
         stm = 'PRAGMA table_info(%s)' % name

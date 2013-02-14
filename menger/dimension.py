@@ -73,11 +73,11 @@ class Tree(Dimension):
                     new_level.append((key, parent2children[child]))
             level = new_level
 
-    def drill(self, coord=[]):
+    def drill(self, *coord):
         #TODO fill cache
         children = self._db.get_child_coordinates(self, self.key(coord))
         for name in children:
-            yield coord + [str(name[0])] #TODO ugly
+            yield coord + (name[0],)
 
 
 # class Flat(Tree):

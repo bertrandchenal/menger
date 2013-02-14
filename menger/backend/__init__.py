@@ -1,3 +1,4 @@
+from sql import SqlBackend
 from sqlite import SqliteBackend
 
 try:

@@ -2,7 +2,7 @@ import os
 from random import sample
 from string import letters
 
-from menger import measure, dimension, Space, backend
+from menger import measure, dimension, Space
 
 class Item(Space):
     category = dimension.Tree('Category')
@@ -37,37 +37,42 @@ def test_data(nb):
                }
 
 def main(uri):
-    # Decrement max_cache to trigger the limit quicker
-    backend.MAX_CACHE = 100
-
     # Load and Fetch
-    with backend.connect(uri):
+    with Item.connect(uri):
         Item.load([{'category': [], 'name': [], 'total': 1, 'amount': 1}])
         assert Item.fetch()['total'] == 1
 
     if uri != 'sqlite:///:memory:':
-        with backend.connect(uri):
+        with Item.connect(uri):
             assert Item.fetch()['total'] == 1
 
     # Drill
-    with backend.connect(uri):
+    with Item.connect(uri):
         Item.load(item_data*50)
-        assert list(Item.category.drill(['A'])) == [['A', 'B']]
-        assert list(Item.category.drill(['A', 'B'])) == [
-            ['A', 'B', 'C'],
-            ['A', 'B', 'D']
-            ]
-        assert list(Item.category.drill(['A', 'B', 'C'])) == []
+        assert tuple(Item.category.drill('A')) == (('A', 'B'),)
+        assert tuple(Item.category.drill('A', 'B')) == (
+            ('A', 'B', 'C'),
+            ('A', 'B', 'D')
+            )
+        assert tuple(Item.category.drill('A', 'B', 'C')) == tuple()
         assert Item.fetch(category=['A'])['total'] == (15 + 9) * 50
 
     # Force cache invalidation
-    with backend.connect(uri):
-        nb_items = backend.MAX_CACHE * 10
-        Test.load(test_data(nb_items))
-        res = Test.fetch(category=['A'])
+    Test.MAX_CACHE = 100
+    nb_items = 1000
+    items = list(test_data(nb_items))
+
+    with Test.connect(uri):
+        Test.load(items)
+        res = Test.fetch()
 
         assert res['total'] == 7 * nb_items
         assert res['count'] == 1 * nb_items
+
+    with Test.connect(uri):
+        for item in items:
+            Test.fetch(**item)
+        assert len(Test._db.read_cache) < Test.MAX_CACHE
 
 if __name__ == '__main__':
     import time

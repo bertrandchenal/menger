@@ -1,22 +1,5 @@
-from contextlib import contextmanager
-
 
 class BaseBackend(object):
-
-    @contextmanager
-    def connect(self, uri='sqlite:///:memory:'):
-        """
-        Return a context manager that takes care of registering space
-        and flushong data.
-        """
-        from .. import space
-
-        for spc in space.SPACES.itervalues():
-            self.register(spc)
-        yield
-        for spc in space.SPACES.itervalues():
-            spc.flush()
-
 
     def build_space(self, name):
         from .. import space, dimension, measure

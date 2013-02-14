@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from copy import copy
 from itertools import product, izip, imap
 from collections import namedtuple
@@ -62,15 +63,21 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
+    MAX_CACHE = 1000
 
     @classmethod
-    def set_db(cls, db):
-        cls._db = db
+    @contextmanager
+    def connect(cls, uri):
+        cls._db = backend.get_backend(uri)
         for dim in cls._dimensions.itervalues():
-            dim.set_db(db)
+            dim.set_db(cls._db)
 
         for msr in cls._measures.itervalues():
-            msr.set_db(db)
+            msr.set_db(cls._db)
+
+        cls._db.register(cls)
+        yield
+        cls._db.close()
 
     @classmethod
     def aggregates(cls, point):
@@ -78,7 +85,7 @@ class Space:
             yield dim.aggregates(tuple(point[name]))
 
     @classmethod
-    def key(cls, point, create=True):
+    def key(cls, point, create=False):
         return tuple(
             dim.key(point.get(name, tuple()), create=create) \
                 for name, dim in cls._dimensions.iteritems())
@@ -86,64 +93,22 @@ class Space:
     @classmethod
     def load(cls, points):
         for point in points:
+            values = tuple(point[m] for m in cls._measures)
             for parent_coords in product(*tuple(cls.aggregates(point))):
-                cls.increment(parent_coords, point)
-
-    @classmethod
-    def flush(cls):
-        cls._db.update(cls, cls._update_cache)
-        cls._db.insert(cls, cls._insert_cache)
-        cls._db.commit()
-        cls._update_cache.clear()
-        cls._insert_cache.clear()
-        cls._read_cache.clear()
-
-    @classmethod
-    def increment(cls, key, values):
-        old_values = cls.get(key)
-        iter_values = (values[msr] for msr in cls._measures)
-
-        if old_values is None:
-            new_values = tuple(iter_values)
-        else:
-            new_values = tuple(m.increment(x, y) for m, x, y in zip(
-                    cls._measures.itervalues(), iter_values, old_values))
-
-        if old_values is None or key in cls._insert_cache:
-            cls._insert_cache[key] = new_values
-            if len(cls._insert_cache) > backend.MAX_CACHE:
-                cls.flush()
-        else:
-            cls._update_cache[key] = new_values
-            if len(cls._update_cache) > backend.MAX_CACHE:
-                cls.flush()
+                cls._db.increment(parent_coords, values)
 
     @classmethod
     def fetch(cls, **point):
-        res = cls.get(cls.key(point, False))
-
+        key = cls.key(point)
+        res = cls._db.get([key]).next()[1]
         if res is None:
             res = tuple(0 for x in cls._measures)
+        if key in cls._db.write_buffer:
+            inc = cls._db.write_buffer.get(key)
+            res = tuple(
+                a + b for a, b in izip(res, inc))
+
         return dict(zip(cls._measures, res))
-
-    @classmethod
-    def get(cls, key):
-        if key in cls._update_cache:
-            return cls._update_cache[key]
-
-        if key in cls._insert_cache:
-            return cls._insert_cache[key]
-
-        if key in cls._read_cache:
-            return cls._read_cache[key]
-
-        values = cls._db.get(cls, key)
-        if len(cls._read_cache) > backend.MAX_CACHE:
-            cls._read_cache.clear()
-
-        cls._read_cache[key] = values
-
-        return values
 
 
 def build_space(data_point, name):
