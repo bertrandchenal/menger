@@ -1,7 +1,7 @@
 
 class Measure(object):
 
-    def __init__(self, label):
+    def __init__(self, label, type='float'): #TODO support type='integer'
         self.label = label
         self._db = None
 

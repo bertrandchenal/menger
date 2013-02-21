@@ -1,0 +1,152 @@
+#! /usr/bin/env python2
+
+"""
+Usage example:
+
+$ mng load data.json --db=mydb --name=myspace
+$ mng drill category=Electronics
+Electronics/Television & Video
+Electronics/Computers
+Electronics/Camera & Photo
+$ mng fetch date=2012/01 category="Electronics/Television & Video"
+3.14
+"""
+
+import ConfigParser
+import argparse
+import io
+import json
+import os
+import shlex
+from itertools import chain, izip
+
+from menger import build_space, backend
+
+
+class Cli(object):
+
+    def __init__(self, action=[], db='mng.db', name='Space', filter=None):
+        self.action = action[0]
+        self.action_args = action[1:]
+        self.uri = db
+        self.name = name
+        self.filter = filter
+
+    def connect(self, data_point=None):
+        if data_point is None:
+            bckd = backend.get_backend(self.uri)
+            self.space = bckd.build_space(self.name)
+            bckd.close()
+        else:
+            self.space = build_space(data_point, self.name)
+        return self.space.connect(self.uri)
+
+    def do_fetch(self):
+        with self.connect():
+            point = {}
+            for name, values in self.split_args():
+                point[name] = values
+            points = list(chain(*self.all_points(point)))
+            for point, res in izip(points, self.space.fetchmany(points)):
+                key = '\t'.join(
+                    '%s: %-20s' % (
+                        (k, '/'.join(map(str, v)))
+                        ) for k, v in point.iteritems()
+                    )
+                values = '\t'.join(
+                    ': '.join(map(str, it)) for it in res.iteritems()
+                    )
+                print key, '\t', values
+
+    def all_points(self, point):
+        if any('*' in v for v in point.itervalues()):
+            for k, values in point.iteritems():
+                for pos, val in enumerate(values):
+                    if val == '*':
+                        dim = getattr(self.space, k)
+                        for new_val in list(dim.drill(*values[:pos])):
+                            point = point.copy()
+                            point[k] = new_val + values[pos+1:]
+                            yield chain(*self.all_points(point))
+
+        else:
+            yield [point]
+
+    def do_drill(self):
+        with self.connect():
+            point = {}
+            for name, values in self.split_args():
+                self.drill(name, values)
+
+    def drill(self, name, values):
+        dim = getattr(self.space, name)
+        if '*' not in values:
+            for res in dim.drill(*values):
+                print '/'.join(res)
+            return
+
+        for pos, val in enumerate(values):
+            if val == '*':
+                for new_val in list(dim.drill(*values[:pos])):
+                    self.drill(name, new_val + values[pos+1:])
+
+    def do_load(self):
+        for path in self.action_args:
+            fh = open(path)
+            first = next(fh).strip()
+            if not first:
+                print 'File %s ignored' % path
+            first = json.loads(first)
+
+            with self.connect(first):
+                self.space.load([first])
+                self.space.load((json.loads(l.strip()) for l in fh))
+                fh.close()
+
+    def split_args(self):
+        for arg in self.action_args:
+            if '=' in arg:
+                name, values = arg.split('=')
+                values = tuple(values.split('/'))
+                if not hasattr(self.space, name):
+                    exit('"%s" has no dimension "%s"' % (
+                            self.space._name, name))
+
+                dim = getattr(self.space, name)
+
+                if dim.type == 'integer':
+                    values = tuple(v if v == '*' else int(v) for v in values)
+            else:
+                name = arg
+                values = tuple()
+            yield name, values
+
+def main():
+
+    parser = argparse.ArgumentParser(description='Menger CLI.')
+
+    parser.add_argument('action', help='drill, fetch or load', nargs='+')
+    parser.add_argument('--db', '-d', help='Database URI')
+    parser.add_argument('--name', '-n', help='Space name')
+    parser.add_argument('--filter', '-f', help='Filter results')
+
+    config_args = {}
+    if os.path.exists('.mng'):
+        config = ConfigParser.ConfigParser()
+        config.read('.mng')
+        config_args.update(config.items('default'))
+
+    parse_args = parser.parse_args()
+
+    args = {}
+    for key in ('db', 'name', 'action', 'filter'):
+        args[key] = getattr(parse_args, key) or config_args.get(key)
+
+    cli = Cli(**args)
+    if not hasattr(cli, 'do_' + cli.action):
+        exit('Unkown action "%s"' % cli.action)
+    getattr(cli, 'do_' + cli.action)()
+
+
+if __name__ == '__main__':
+    main()

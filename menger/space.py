@@ -82,12 +82,12 @@ class Space:
     @classmethod
     def aggregates(cls, point):
         for name, dim in cls._dimensions.iteritems():
-            yield dim.aggregates(tuple(point[name]))
+            yield dim.aggregates(point[name])
 
     @classmethod
     def key(cls, point, create=False):
         return tuple(
-            dim.key(point.get(name, tuple()), create=create) \
+            dim.key(point.get(name, dim.default), create=create) \
                 for name, dim in cls._dimensions.iteritems())
 
     @classmethod
@@ -98,17 +98,14 @@ class Space:
                 cls._db.increment(parent_coords, values)
 
     @classmethod
-    def fetch(cls, **point):
-        key = cls.key(point)
-        res = cls._db.get([key]).next()[1]
-        if res is None:
-            res = tuple(0 for x in cls._measures)
-        if key in cls._db.write_buffer:
-            inc = cls._db.write_buffer.get(key)
-            res = tuple(
-                a + b for a, b in izip(res, inc))
+    def fetchmany(cls, points):
+        keys = (cls.key(p, False) for p in points)
+        return cls._db.fetch(keys)
 
-        return dict(zip(cls._measures, res))
+    @classmethod
+    def fetch(cls, **point):
+        keys = (cls.key(point, False),)
+        return cls._db.fetch(keys).next()
 
 
 def build_space(data_point, name):
@@ -119,7 +116,10 @@ def build_space(data_point, name):
     attributes = {}
     for k, v in data_point.iteritems():
         if isinstance(v, list):
-            attributes[k] = dimension.Tree(k)
+            type = "integer"
+            if isinstance(v[0], basestring):
+                type = 'varchar'
+            attributes[k] = dimension.Tree(k, type=type)
         elif isinstance(v, (int, float)):
             attributes[k] = measure.Sum(k)
         else:

@@ -143,4 +143,14 @@ class PGBackend(SqlBackend):
         stm = 'SELECT column_name, data_type '\
             'from information_schema.columns where table_name=%s'
         self.cursor.execute(stm, (name,))
-        return self.cursor.fetchall()
+
+        for col_name, col_type in self.cursor.fetchall():
+            if col_type == 'integer':
+                table = '%s_%s' % (name, col_name)
+                self.cursor.execute(stm, (table,))
+                for dim_col, dim_type in self.cursor:
+                    if dim_col == 'name':
+                        yield col_name, col_type, dim_type
+                        break
+            else:
+                yield col_name, col_type, None

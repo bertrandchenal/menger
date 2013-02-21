@@ -2,8 +2,9 @@ from collections import defaultdict
 
 class Dimension(object):
 
-    def __init__(self, label):
+    def __init__(self, label, type='varchar'):
         self.label = label
+        self.type = type
         self.serialized = {} #s/serialized/ids/?
         self._db = None
         self._spc = None
@@ -15,7 +16,7 @@ class Dimension(object):
 
 class Tree(Dimension):
 
-    default = []
+    default = tuple()
 
     def key(self, coord, create=True):
         coord = tuple(coord)
@@ -35,11 +36,10 @@ class Tree(Dimension):
 
         return self.add_coordinate(coord)
 
-    def aggregates(self, coord):
-        if coord == tuple():
-            return (self.key(coord),)
-        else:
-            return self.aggregates(coord[:-1]) + (self.key(coord),)
+    def aggregates(self, coord): # XXX s/aggregates/build_key/
+        if not coord:
+            return (self.key(tuple()),)
+        return self.aggregates(coord[:-1]) + (self.key(coord),)
 
     def add_coordinate(self, coord):
         if len(coord) == 0:
@@ -75,21 +75,7 @@ class Tree(Dimension):
 
     def drill(self, *coord):
         #TODO fill cache
-        children = self._db.get_child_coordinates(self, self.key(coord))
+        children = self._db.get_child_coordinates(self, self.key(coord, False))
         for name in children:
-            yield coord + (name[0],)
-
-
-# class Flat(Tree):
-
-#     default = None
-
-#     def key(cls, coord):
-#         yield None
-#         yield coord
-
-#     def drill(self):
-#         return self._db.meta.drill(self._name, None)
-
-#     def store_coordinate(self, coord):
-#         self._db.meta.store_coordinate(self._name, None, coord)
+            if name[0]:
+                yield coord + (name[0],)

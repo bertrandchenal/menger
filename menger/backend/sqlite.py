@@ -21,15 +21,18 @@ class SqliteBackend(SqlBackend):
 
     def register(self, space):
         self.space = space
-        for dim in space._dimensions:
-            name = '%s_%s' % (space._name, dim)
+        for dim_name, dim in space._dimensions.iteritems():
+            name = '%s_%s' % (space._name, dim_name)
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
-                    'parent INTEGER, name TEXT)' % name)
+                    'parent INTEGER, name %s)' % (name, dim.type))
 
+        # TODO add unique index on (parent, name)
         # TODO declare foreign key
         cols = ','.join(chain(
-                ('%s INTEGER NOT NULL' % i for i in space._dimensions),
+                ('%s INTEGER NOT NULL references %s_%s (id)' % (
+                        i, space._name, i
+                        ) for i in space._dimensions),
                 ('%s REAL NOT NULL' % i for i in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
@@ -109,6 +112,20 @@ class SqliteBackend(SqlBackend):
 
 
     def get_columns_info(self, name):
-        stm = 'PRAGMA table_info(%s)' % name
-        self.cursor.execute(stm)
-        return [(l[1], l[2].lower()) for l in self.cursor]
+        # FIXME user  PRAGMA foreign_key_list(table);
+        stm = 'PRAGMA table_info(%s)'
+        self.cursor.execute(stm % name)
+        for space_info in list(self.cursor):
+            col_name = space_info[1]
+            col_type = space_info[2].lower()
+            if col_type == 'integer':
+                table = '%s_%s' % (name, col_name)
+                self.cursor.execute(stm % table)
+                for dim_info in self.cursor:
+                    dim_col = dim_info[1]
+                    dim_type = dim_info[2].lower()
+                    if dim_col == 'name':
+                        yield col_name, col_type, dim_type
+                        break
+            else:
+                yield col_name, col_type, None
