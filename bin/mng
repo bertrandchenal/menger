@@ -126,8 +126,8 @@ def main():
     parser = argparse.ArgumentParser(description='Menger CLI.')
 
     parser.add_argument('action', help='drill, fetch or load', nargs='+')
-    parser.add_argument('--db', '-d', help='Database URI')
-    parser.add_argument('--name', '-n', help='Space name')
+    parser.add_argument('--db', '-d', help='Database URI', default="mng.db")
+    parser.add_argument('--name', '-n', help='Space name', default="Space")
     parser.add_argument('--filter', '-f', help='Filter results')
 
     config_args = {}
