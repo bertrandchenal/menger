@@ -116,10 +116,10 @@ def build_space(data_point, name):
     attributes = {}
     for k, v in data_point.iteritems():
         if isinstance(v, list):
-            type = "integer"
+            col_type = "integer"
             if isinstance(v[0], basestring):
-                type = 'varchar'
-            attributes[k] = dimension.Tree(k, type=type)
+                col_type = 'varchar'
+            attributes[k] = dimension.Tree(k, type=col_type)
         elif isinstance(v, (int, float)):
             attributes[k] = measure.Sum(k)
         else:
