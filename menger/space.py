@@ -22,24 +22,24 @@ class MetaSpace(type):
             if not type(b) == cls:
                 continue
             if hasattr(b, '_dimensions'):
-                for name, dim in b._dimensions.iteritems():
+                for name, dim in b._dimensions:
                     attrs[name] = copy(dim)
 
             if hasattr(b, '_measures'):
-                for name, msr in b._measures.iteritems():
+                for name, msr in b._measures:
                     attrs[name] = copy(msr)
 
-        dimensions = {}
-        measures = {}
+        dimensions = []
+        measures = []
         for k, v in attrs.iteritems():
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
-                dimensions[k] = v
+                dimensions.append((k, v))
                 v._name = k
 
             # Collect measures
             if isinstance(v, measure.Measure):
-                measures[k] = v
+                measures.append((k, v))
                 v._name = k
 
         attrs['_dimensions'] = dimensions
@@ -50,7 +50,7 @@ class MetaSpace(type):
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
-        for dim in dimensions.itervalues():
+        for _, dim in dimensions:
             dim._spc = spc
 
         if bases:
@@ -69,10 +69,10 @@ class Space:
     @contextmanager
     def connect(cls, uri):
         cls._db = backend.get_backend(uri)
-        for dim in cls._dimensions.itervalues():
+        for _, dim in cls._dimensions:
             dim.set_db(cls._db)
 
-        for msr in cls._measures.itervalues():
+        for _, msr in cls._measures:
             msr.set_db(cls._db)
 
         cls._db.register(cls)
@@ -81,19 +81,19 @@ class Space:
 
     @classmethod
     def aggregates(cls, point):
-        for name, dim in cls._dimensions.iteritems():
+        for name, dim in cls._dimensions:
             yield dim.aggregates(point[name])
 
     @classmethod
     def key(cls, point, create=False):
         return tuple(
             dim.key(point.get(name, dim.default), create=create) \
-                for name, dim in cls._dimensions.iteritems())
+                for name, dim in cls._dimensions)
 
     @classmethod
     def load(cls, points):
         for point in points:
-            values = tuple(point[m] for m in cls._measures)
+            values = tuple(point[m] for m, _ in cls._measures)
             for parent_coords in product(*tuple(cls.aggregates(point))):
                 cls._db.increment(parent_coords, values)
 

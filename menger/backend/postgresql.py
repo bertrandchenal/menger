@@ -19,7 +19,7 @@ class PGBackend(SqlBackend):
     def register(self, space):
         self.space = space
         create_idx = 'CREATE UNIQUE INDEX %s_id_parent_index on %s (id, parent)'
-        for dim in space._dimensions:
+        for dim, _ in space._dimensions:
             name = '%s_%s' % (space._name, dim)
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id SERIAL PRIMARY KEY,'
@@ -36,8 +36,8 @@ class PGBackend(SqlBackend):
         cols = ','.join(chain(
                 ('%s INTEGER NOT NULL references %s_%s (id)' % (
                         i, space._name, i
-                        ) for i in space._dimensions),
-                ('%s REAL NOT NULL' % i for i in space._measures)
+                        ) for i, _ in space._dimensions),
+                ('%s REAL NOT NULL' % i for i, _ in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
         self.cursor.execute(query)
@@ -52,7 +52,8 @@ class PGBackend(SqlBackend):
 
         self.cursor.execute(
             'CREATE UNIQUE INDEX %s_dim_index on %s (%s)' % (
-                space._name, space._name, ','.join(space._dimensions)
+                space._name, space._name,
+                ','.join(d for d , _ in space._dimensions)
                 )
             )
 
@@ -89,8 +90,11 @@ class PGBackend(SqlBackend):
         if not flushing and len(self.read_cache) > self.space.MAX_CACHE:
             self.flush()
 
-        select = ','.join(chain(self.space._dimensions, self.space._measures))
-        where_dim = ','.join(self.space._dimensions)
+        select = ','.join(chain(
+                (d for d, _ in self.space._dimensions),
+                (m for m, _ in self.space._measures)
+                ))
+        where_dim = ','.join(d for d, _ in self.space._dimensions)
         where_in_part = ','.join('%s' for d in self.space._dimensions)
         where_in = ','.join('(%s)' % where_in_part for k in keys \
                                 if k not in self.read_cache)
@@ -121,8 +125,9 @@ class PGBackend(SqlBackend):
 
     def update(self, values):
         # TODO write lock on table
-        set_stm = ','.join('%s = %%s' % m for m in self.space._measures)
-        clause =  ' and '.join('%s = %%s' % d for d in self.space._dimensions)
+        set_stm = ','.join('%s = %%s' % m for m, _ in self.space._measures)
+        clause =  ' and '.join('%s = %%s' % \
+                d for d, _ in self.space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
             self.space._name, set_stm, clause)
 
@@ -130,7 +135,10 @@ class PGBackend(SqlBackend):
         self.cursor.executemany(update_stm, args)
 
     def insert(self, values):
-        fields = tuple(chain(self.space._measures, self.space._dimensions))
+        fields = tuple(chain(
+                (m for m, _ in self.space._measures),
+                (d for d, _ in self.space._dimensions)
+                ))
 
         data = StringIO( '\n'.join(
                 '\t'.join(imap(str, chain(k, v)))

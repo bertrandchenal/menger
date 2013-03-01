@@ -29,5 +29,7 @@ class BaseBackend(object):
             if key in self.write_buffer:
                 inc = self.write_buffer.get(key)
                 res = tuple(imap(add, res, inc))
-            yield dict(izip(self.space._measures, res))
+            yield dict(izip(
+                    (m for m, _ in self.space._measures),
+                    res))
 

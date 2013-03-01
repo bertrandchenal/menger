@@ -21,7 +21,7 @@ class SqliteBackend(SqlBackend):
 
     def register(self, space):
         self.space = space
-        for dim_name, dim in space._dimensions.iteritems():
+        for dim_name, dim in space._dimensions:
             name = '%s_%s' % (space._name, dim_name)
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
@@ -32,15 +32,17 @@ class SqliteBackend(SqlBackend):
         cols = ','.join(chain(
                 ('%s INTEGER NOT NULL references %s_%s (id)' % (
                         i, space._name, i
-                        ) for i in space._dimensions),
-                ('%s REAL NOT NULL' % i for i in space._measures)
+                        ) for i, _ in space._dimensions),
+                ('%s REAL NOT NULL' % i for i, _ in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
         self.cursor.execute(query)
 
         self.cursor.execute(
             'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on %s (%s)' % (
-                space._name, space._name, ','.join(space._dimensions)
+                space._name,
+                space._name,
+                ','.join(d for d, _ in space._dimensions)
                 )
             )
 
@@ -76,7 +78,7 @@ class SqliteBackend(SqlBackend):
         if not flushing and len(self.read_cache) > self.space.MAX_CACHE:
             self.flush()
 
-        select = ','.join(self.space._measures)
+        select = ','.join(m for m, _ in self.space._measures)
         clause = lambda x: ('%s is ?' if x[1] is None else '%s = ?') % x[0]
         stm = 'SELECT %s FROM %s WHERE ' % (select, self.space._name)
 
@@ -85,15 +87,18 @@ class SqliteBackend(SqlBackend):
                 yield key, self.read_cache[key]
                 continue
 
-            where = ' and '.join(imap(clause, zip(self.space._dimensions, key)))
+            where = ' and '.join(imap(clause, zip(
+                        (d for d, _ in self.space._dimensions),
+                        key
+                        )))
             values = self.cursor.execute(stm + where, key).fetchone()
 
             self.read_cache[key] = values
             yield key, values
 
     def update(self, values):
-        set_stm = ','.join('%s = ?' % m for m in self.space._measures)
-        clause =  ' and '.join('%s = ?' % d for d in self.space._dimensions)
+        set_stm = ','.join('%s = ?' % m for m, _ in self.space._measures)
+        clause =  ' and '.join('%s = ?' % d for d, _ in self.space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
             self.space._name, set_stm, clause)
 
@@ -101,7 +106,10 @@ class SqliteBackend(SqlBackend):
         self.cursor.executemany(update_stm, args)
 
     def insert(self, values):
-        fields = tuple(chain(self.space._measures, self.space._dimensions))
+        fields = tuple(chain(
+                (m for m, _ in self.space._measures),
+                (d for d, _ in self.space._dimensions)
+                ))
         val_stm = ','.join('?' for f in fields)
         field_stm = ','.join(fields)
         insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
