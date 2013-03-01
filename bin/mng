@@ -44,19 +44,24 @@ class Cli(object):
     def do_fetch(self):
         with self.connect():
             point = {}
+            query_dims = []
             for name, values in self.split_args():
                 point[name] = values
+                query_dims.append(name)
+
             points = list(chain(*self.all_points(point)))
+            if not points:
+                return
+
+            print '\t'.join(chain(
+                    query_dims,
+                    (m for m, _ in self.space._measures)
+                    ))
+
             for point, res in izip(points, self.space.fetchmany(points)):
-                key = '\t'.join(
-                    '%s: %-20s' % (
-                        (k, '/'.join(map(str, v)))
-                        ) for k, v in point.iteritems()
-                    )
-                values = '\t'.join(
-                    ': '.join(map(str, it)) for it in res.iteritems()
-                    )
-                print key, '\t', values
+                dims = ('/'.join(map(str, point[d])) for d in query_dims)
+                msrs = (str(res[m]) for m, _ in self.space._measures)
+                print '\t'.join(chain(dims, msrs))
 
     def all_points(self, point):
         if any('*' in v for v in point.itervalues()):
@@ -93,9 +98,10 @@ class Cli(object):
     def do_load(self):
         for path in self.action_args:
             fh = open(path)
-            first = next(fh).strip()
+            first = next(fh, "").strip()
             if not first:
                 print 'File %s ignored' % path
+                continue
             first = json.loads(first)
 
             with self.connect(first):
