@@ -8,8 +8,11 @@ $ mng drill category=Electronics
 Electronics/Television & Video
 Electronics/Computers
 Electronics/Camera & Photo
-$ mng fetch date=2012/01 category="Electronics/Television & Video"
-3.14
+$ mng fetch category="Electronics/Television & Video"
+category    total
+Electronics/Television & Video  20.0
+Electronics/Computers  10.0
+Electronics/Camera & Photo      30.0
 """
 
 import ConfigParser
