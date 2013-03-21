@@ -7,12 +7,12 @@
 from distutils.core import setup
 
 setup(name='Menger',
-      version='1.1',
+      version='1.2',
       description='Statistics storage',
       author='Bertrand Chenal',
       author_email='bertrandchenal@gmail.com',
       url='https://bitbucket.org/bertrandchenal/menger',
-      packages=['menger'],
+      packages=['menger', 'menger.backend'],
       scripts=['bin/mng'],
       requires=[],
       license='ISC',
