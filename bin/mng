@@ -17,10 +17,8 @@ Electronics/Camera & Photo      30.0
 
 import ConfigParser
 import argparse
-import io
 import json
 import os
-import shlex
 from itertools import chain, izip
 
 from menger import build_space, backend
@@ -82,7 +80,6 @@ class Cli(object):
 
     def do_drill(self):
         with self.connect():
-            point = {}
             for name, values in self.split_args():
                 self.drill(name, values)
 
