@@ -26,12 +26,11 @@ from menger import build_space, backend
 
 class Cli(object):
 
-    def __init__(self, action=[], db='mng.db', name='Space', filter=None):
+    def __init__(self, action=[], db='mng.db', name='Space'):
         self.action = action[0]
         self.action_args = action[1:]
         self.uri = db
         self.name = name
-        self.filter = filter
 
     def connect(self, data_point=None):
         if data_point is None:
@@ -138,7 +137,6 @@ def main():
     parser.add_argument('action', help='drill, fetch or load', nargs='+')
     parser.add_argument('--db', '-d', help='Database URI', default="mng.db")
     parser.add_argument('--name', '-n', help='Space name', default="Space")
-    parser.add_argument('--filter', '-f', help='Filter results')
 
     config_args = {}
     if os.path.exists('.mng'):
@@ -149,7 +147,7 @@ def main():
     parse_args = parser.parse_args()
 
     args = {}
-    for key in ('db', 'name', 'action', 'filter'):
+    for key in ('db', 'name', 'action'):
         args[key] = config_args.get(key) or getattr(parse_args, key)
 
     cli = Cli(**args)
