@@ -67,13 +67,17 @@ class Cli(object):
     def all_points(self, point):
         if any('*' in v for v in point.itervalues()):
             for k, values in point.iteritems():
+                found = False
                 for pos, val in enumerate(values):
                     if val == '*':
+                        found = True
                         dim = getattr(self.space, k)
                         for new_val in list(dim.drill(*values[:pos])):
                             point = point.copy()
                             point[k] = new_val + values[pos+1:]
                             yield chain(*self.all_points(point))
+                if found:
+                    break
 
         else:
             yield [point]
