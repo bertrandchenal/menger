@@ -146,7 +146,7 @@ def main():
 
     args = {}
     for key in ('db', 'name', 'action', 'filter'):
-        args[key] = getattr(parse_args, key) or config_args.get(key)
+        args[key] = config_args.get(key) or getattr(parse_args, key)
 
     cli = Cli(**args)
     if not hasattr(cli, 'do_' + cli.action):
