@@ -65,8 +65,9 @@ class Cli(object):
 
     def drill(self, name, values):
         dim = getattr(self.space, name)
-        for res in chain(*dim.drill(values)):
-            print '/'.join(map(str, res))
+        for sibling in dim.explode(values):
+            for res in dim.drill(sibling):
+                print '/'.join(map(str, res))
 
     def do_load(self):
         for path in self.action_args:

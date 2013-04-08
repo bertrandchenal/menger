@@ -121,7 +121,7 @@ class Space:
         for name, dim in cls._dimensions:
             if name not in point:
                 continue
-            vals.append(chain(*dim.drill(point[name])))
+            vals.append(dim.explode(point[name]))
 
         for point_tuple in product(*vals):
             sub_point = {}
