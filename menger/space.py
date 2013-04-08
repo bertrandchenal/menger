@@ -109,29 +109,30 @@ class Space:
 
     @classmethod
     def dice(cls, point):
-        points = list(chain(*tuple(cls.drill(point))))
+        points = list(cls.drill(point))
         for point, res in izip(points, cls.fetchmany(points)):
             point.update(res)
             yield point
 
     @classmethod
     def drill(cls, point):
-        if any('*' in v for v in point.itervalues()):
-            for k, values in point.iteritems():
-                found = False
-                for pos, val in enumerate(values):
-                    if val == '*':
-                        found = True
-                        dim = getattr(cls, k)
-                        for new_val in list(dim.drill(*values[:pos])):
-                            point = point.copy()
-                            point[k] = new_val + values[pos+1:]
-                            yield chain(*cls.drill(point))
-                if found:
-                    break
+        res = {}
+        vals = []
+        for name, dim in cls._dimensions:
+            if name not in point:
+                continue
+            vals.append(chain(*dim.drill(point[name])))
 
-        else:
-            yield [point]
+        for point_tuple in product(*vals):
+            sub_point = {}
+            pos = 0
+            for name, dim in cls._dimensions:
+                if name not in point:
+                    continue
+                sub_point[name] = point_tuple[pos]
+                pos += 1
+            yield sub_point
+
 
 def build_space(data_point, name):
     """

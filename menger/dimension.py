@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import chain
 
 class Dimension(object):
 
@@ -73,9 +74,18 @@ class Tree(Dimension):
                     new_level.append((key, parent2children[child]))
             level = new_level
 
-    def drill(self, *coord):
-        #TODO fill cache
-        children = self._db.get_child_coordinates(self, self.key(coord, False))
-        for name in children:
-            if name[0]:
-                yield coord + (name[0],)
+    def drill(self, coord):
+        found = False
+        for pos, val in enumerate(coord):
+            if val != '*':
+                continue
+            found = True
+            for new_val in chain(*self.drill(coord[:pos])):
+                sub_coord = tuple(new_val) + coord[pos+1:]
+                yield chain(*self.drill(sub_coord))
+
+        if not found:
+            children = self._db.get_child_coordinates(
+                self, self.key(coord, False))
+            res = (coord + (name[0],) for name in sorted(children) if name[0])
+            yield res

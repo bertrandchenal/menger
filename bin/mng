@@ -65,15 +65,8 @@ class Cli(object):
 
     def drill(self, name, values):
         dim = getattr(self.space, name)
-        if '*' not in values:
-            for res in dim.drill(*values):
-                print '/'.join(res)
-            return
-
-        for pos, val in enumerate(values):
-            if val == '*':
-                for new_val in list(dim.drill(*values[:pos])):
-                    self.drill(name, new_val + values[pos+1:])
+        for res in chain(*dim.drill(values)):
+            print '/'.join(map(str, res))
 
     def do_load(self):
         for path in self.action_args:
