@@ -7,7 +7,7 @@
 from distutils.core import setup
 
 setup(name='Menger',
-      version='1.2.1',
+      version='1.2.2',
       description='Statistics storage',
       author='Bertrand Chenal',
       author_email='bertrandchenal@gmail.com',
