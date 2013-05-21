@@ -14,7 +14,7 @@ class SqlBackend(BaseBackend):
         if len(self.write_buffer) > self.space.MAX_CACHE:
             self.flush()
 
-    def flush(self):
+    def flush(self, flush_read_cache=False):
         to_update = {}
         to_insert = {}
         for key, old_values in self.get(self.write_buffer, True):
@@ -29,7 +29,10 @@ class SqlBackend(BaseBackend):
         if to_insert:
             self.insert(to_insert)
 
-        self.old_read_cache = self.read_cache
+        if flush_read_cache:
+            self.old_read_cache = {}
+        else:
+            self.old_read_cache = self.read_cache
         self.read_cache = {}
         self.write_buffer.clear()
         self.connection.commit()
