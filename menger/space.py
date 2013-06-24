@@ -35,7 +35,7 @@ class MetaSpace(type):
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
                 dimensions.append((k, v))
-                v._name = k
+                v._name = k # TODO use name instead of _name (the _ doesnt make sense )
 
             # Collect measures
             if isinstance(v, measure.Measure):
@@ -63,7 +63,7 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
-    MAX_CACHE = 1000
+    MAX_CACHE = 10000
 
     @classmethod
     @contextmanager
@@ -82,25 +82,25 @@ class Space:
     @classmethod
     def aggregates(cls, point):
         for name, dim in cls._dimensions:
-            yield dim.aggregates(point[name])
+            yield (dim.key(tuple()), dim.key(tuple(point[name])))
 
     @classmethod
     def key(cls, point, create=False):
         return tuple(
-            dim.key(point.get(name, dim.default), create=create) \
+            dim.key(point.get(name, tuple()), create=create) \
                 for name, dim in cls._dimensions)
 
     @classmethod
     def load(cls, points):
         for point in points:
             values = tuple(point[m] for m, _ in cls._measures)
-            for parent_coords in product(*tuple(cls.aggregates(point))):
-                cls._db.increment(parent_coords, values)
+            for coords in product(*tuple(cls.aggregates(point))):
+                cls._db.increment(coords, values)
 
     @classmethod
-    def fetchmany(cls, points):
+    def fetchmany(cls, points, skipzero=False):
         keys = (cls.key(p, False) for p in points)
-        return cls._db.fetch(keys)
+        return cls._db.fetch(keys, skipzero=skipzero)
 
     @classmethod
     def fetch(cls, **point):
@@ -108,9 +108,10 @@ class Space:
         return cls._db.fetch(keys).next()
 
     @classmethod
-    def dice(cls, point):
+    def dice(cls, point, skipzero=False):
         points = list(cls.drill(point))
-        for point, res in izip(points, cls.fetchmany(points)):
+        results = cls.fetchmany(points, skipzero=skipzero)
+        for point, res in izip(points, results):
             point.update(res)
             yield point
 
@@ -146,8 +147,10 @@ def build_space(data_point, name):
             if isinstance(v[0], basestring):
                 col_type = 'varchar'
             attributes[k] = dimension.Tree(k, type=col_type)
-        elif isinstance(v, (int, float)):
-            attributes[k] = measure.Sum(k)
+        elif isinstance(v, float):
+            attributes[k] = measure.Sum(k, type='float')
+        elif isinstance(v, int):
+            attributes[k] = measure.Sum(k, type='integer')
         else:
             raise Exception('Unknow type %s (on key %s)' % (type(v), k))
 

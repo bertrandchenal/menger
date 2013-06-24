@@ -53,7 +53,7 @@ class Cli(object):
                     (m for m, _ in self.space._measures)
                     ))
 
-            for res in self.space.dice(point):
+            for res in self.space.dice(point, skipzero=True):
                 dims = ('/'.join(map(str, res[d])) for d in query_dims)
                 msrs = (str(res[m]) for m, _ in self.space._measures)
                 print '\t'.join(chain(dims, msrs))

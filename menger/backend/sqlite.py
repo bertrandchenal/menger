@@ -1,4 +1,4 @@
-from itertools import chain, imap
+from itertools import chain
 import sqlite3
 
 from sql import SqlBackend
@@ -21,19 +21,34 @@ class SqliteBackend(SqlBackend):
 
     def register(self, space):
         self.space = space
+        self.cursor.execute('PRAGMA foreign_keys=1')
         for dim_name, dim in space._dimensions:
             name = '%s_%s' % (space._name, dim_name)
-            self.cursor.execute(
-                'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY,'
-                    'parent INTEGER, name %s)' % (name, dim.type))
 
-        # TODO add unique index on (parent, name)
-        # TODO declare foreign key
+            # Dimension table
+            self.cursor.execute(
+                'CREATE TABLE IF NOT EXISTS %s ( '\
+                    'id INTEGER PRIMARY KEY, '\
+                    'name %s)' % (name, dim.type))
+
+            # Closure table for the dimension
+            cls_table = name + '_closure'
+            self.cursor.execute(
+                'CREATE TABLE IF NOT EXISTS %s (' \
+                    'parent INTEGER, '\
+                    'child INTEGER, '\
+                    'depth INTEGER)' % cls_table)
+
+            self.cursor.execute(
+                'CREATE INDEX IF NOT EXISTS %s_cls_index '\
+                    'ON %s (parent, child)' % (cls_table, cls_table))
+
+        # Space (main) table
         cols = ','.join(chain(
-                ('%s INTEGER NOT NULL references %s_%s (id)' % (
+                ('%s INTEGER references %s_%s (id) NOT NULL' % (
                         i, space._name, i
                         ) for i, _ in space._dimensions),
-                ('%s REAL NOT NULL' % i for i, _ in space._measures)
+                ('%s %s NOT NULL' % (i, m.type) for i, m in space._measures)
                 ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
         self.cursor.execute(query)
@@ -46,55 +61,87 @@ class SqliteBackend(SqlBackend):
                 )
             )
 
-    def load_coordinates(self, dim):
-        name = '%s_%s' % (self.space._name, dim._name)
-        return self.cursor.execute('SELECT id, parent, name from %s' % name)
-
     def create_coordinate(self, dim, name, parent_id):
         table = "%s_%s" % (self.space._name, dim._name)
+        closure = table + '_closure'
+
+        # Fill dimension table
         self.cursor.execute(
-            'INSERT into %s (name, parent) VALUES (?, ?)' % table,
-            (name, parent_id)
-            )
+            'INSERT into %s (name) VALUES (?)' % table, (name,))
+        last_id = self.cursor.lastrowid
 
-        select = 'SELECT id from %s where name %s ? and parent %s ?'
-        parent_op = parent_id is None and 'is' or '='
-        name_op = name is None and 'is' or '='
+        # Fetch parent depth + 1 as last_id from the closure table ...
+        self.cursor.execute(
+            'SELECT parent, ? as child, depth+1 FROM %s '
+            'WHERE child = ?' % closure, (last_id, parent_id))
 
-        res = self.cursor.execute(select % (table, name_op, parent_op), (
-                name, parent_id
-                ))
-        return res.next()[0]
+        # ... and insert them
+        stm = 'INSERT INTO %s (parent, child, depth) '\
+            ' VALUES (?, ?, ?)' % closure
+        self.cursor.executemany(stm, self.cursor.fetchall())
+        self.cursor.execute(stm, (last_id, last_id, 0))
 
-    def get_child_coordinates(self, dim, parent_id):
+        return last_id
+
+    def get_childs(self, dim, parent_id):
         table = "%s_%s" % (self.space._name, dim._name)
-        select = 'SELECT name from %s where parent %s ?'
-        parent_op = parent_id is None and 'is' or '='
+        closure = table + '_closure'
 
-        res = self.cursor.execute(select % (table, parent_op), (parent_id,))
-        return res
+        if parent_id is None:
+            stm = "SELECT id, name from %s where name is null" % table
+            args = tuple()
+        else:
+            stm = 'SELECT d.id, d.name ' \
+                'FROM %s AS c JOIN %s AS d ON (c.child = d.id) '\
+                'WHERE c.depth = 1 AND c.parent = ?' % (closure, table)
+            args = (parent_id,)
+        return self.cursor.execute(stm, args)
 
     def get(self, keys, flushing=False):
+        """
+        Return values for all measures for given keys.
+        The keys must share the same form (same columns must be set).
+        """
+
         if not flushing and len(self.read_cache) > self.space.MAX_CACHE:
             self.flush()
 
-        select = ','.join(m for m, _ in self.space._measures)
-        clause = lambda x: ('%s is ?' if x[1] is None else '%s = ?') % x[0]
-        stm = 'SELECT %s FROM %s WHERE ' % (select, self.space._name)
+        select = ','.join(
+            'coalesce(sum(%s), 0)' % m for m, _ in self.space._measures)
+
+        table = self.space._name
+        stm = 'SELECT %s FROM %s WHERE ' % (select, table)
+        if not flushing:
+            first = next(keys)
+            stm += ' and '.join(map(
+                    self.build_clause,
+                    zip(first, self.space._dimensions)
+                    ))
+            keys = chain((first,), keys)
+        else:
+            stm += ' and '.join("%s = ?" % d for d, _ in self.space._dimensions)
 
         for key in keys:
             if key in self.read_cache:
                 yield key, self.read_cache[key]
                 continue
-
-            where = ' and '.join(imap(clause, zip(
-                        (d for d, _ in self.space._dimensions),
-                        key
-                        )))
-            values = self.cursor.execute(stm + where, key).fetchone()
+            values = self.cursor.execute(stm, key).fetchone()
 
             self.read_cache[key] = values
             yield key, values
+
+    def build_clause(self, args):
+        key, (dname, dim) = args
+        if key == dim.key(tuple()):
+            return "%s = ?" % dname
+
+        #TODO comparer les perfs avec un join
+        #TODO tester les perfs si on a une colonne "leaf BOOLEAN" pour
+        #booster les subselect
+
+        table = dim._spc._name
+        return "%s in (SELECT child from %s_%s_closure WHERE parent = ?"\
+            ")" % (dname, table, dname)
 
     def update(self, values):
         set_stm = ','.join('%s = ?' % m for m, _ in self.space._measures)
@@ -118,22 +165,23 @@ class SqliteBackend(SqlBackend):
         args = (tuple(chain(v, k)) for k, v in values.iteritems())
         self.cursor.executemany(insert_stm, args)
 
-
     def get_columns_info(self, name):
-        # FIXME user  PRAGMA foreign_key_list(table);
+        stm = 'PRAGMA foreign_key_list(%s)'
+        fk = set(x[3] for x in self.cursor.execute(stm % name))
+
         stm = 'PRAGMA table_info(%s)'
         self.cursor.execute(stm % name)
         for space_info in list(self.cursor):
             col_name = space_info[1]
             col_type = space_info[2].lower()
-            if col_type == 'integer':
+            if col_name in fk:
                 table = '%s_%s' % (name, col_name)
                 self.cursor.execute(stm % table)
                 for dim_info in self.cursor:
                     dim_col = dim_info[1]
                     dim_type = dim_info[2].lower()
                     if dim_col == 'name':
-                        yield col_name, col_type, dim_type
+                        yield col_name, 'dimension', dim_type
                         break
             else:
-                yield col_name, col_type, None
+                yield col_name, 'measure', col_type

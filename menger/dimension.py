@@ -6,9 +6,10 @@ class Dimension(object):
     def __init__(self, label, type='varchar'):
         self.label = label
         self.type = type
-        self.serialized = {} #s/serialized/ids/?
+        self.id_cache = {}
         self._db = None
         self._spc = None
+        # TODO init dim.table and dim.closure_table
 
     def set_db(self, db):
         self._db = db
@@ -17,69 +18,48 @@ class Dimension(object):
 
 class Tree(Dimension):
 
-    default = tuple()
-
     def key(self, coord, create=True):
-        coord = tuple(coord)
-        coord_id = self.serialized.get(coord)
-        if coord_id is not None:
-            return coord_id
+        if coord in self.id_cache:
+            return self.id_cache[coord]
 
-        if not self.serialized:
-            self.fill_serialized()
-
-        coord_id = self.serialized.get(coord)
+        coord_id = self.get_id(coord)
         if coord_id is not None:
             return coord_id
 
         if not create:
             return None
 
-        return self.add_coordinate(coord)
+        return self.create_id(coord)
 
-    def aggregates(self, coord): # XXX s/aggregates/build_key/
-        if not coord:
-            return (self.key(tuple()),)
-        return self.aggregates(coord[:-1]) + (self.key(coord),)
+    def get_id(self, coord):
+        parent = coord[:-1]
 
-    def add_coordinate(self, coord):
-        if len(coord) == 0:
-            new_id = self._db.create_coordinate(self, None, None)
-            parent_coord_ids = tuple()
+        if coord:
+            key = self.key(parent, False)
+            for cid, name in self._db.get_childs(self, key):
+                self.id_cache[parent + (name,)] = cid
         else:
-            parent_coord = coord[:-1]
-            parent_coord_id = self.key(parent_coord)
-            new_id = self._db.create_coordinate(
-                self, coord[-1], parent_coord_id)
+            for cid, name in self._db.get_childs(self, None):
+                self.id_cache[parent] = cid
 
-        self.serialized[coord] = new_id
+        return self.id_cache.get(coord)
+
+    def create_id(self, coord):
+        if not coord:
+            parent = name = None
+        else:
+            parent = self.key(coord[:-1])
+            name = coord[-1]
+
+        new_id = self._db.create_coordinate(self, name , parent)
+        self.id_cache[coord] = new_id
         return new_id
 
-    def fill_serialized(self):
-        id2name = {}
-        parent2children = defaultdict(set)
-        for cid, pid, name in self._db.load_coordinates(self):
-            id2name[cid] = name
-            parent2children[pid].add(cid)
-
-        level = [(tuple(), parent2children[None])]
-        while level:
-            new_level = []
-            for parent, children in level:
-                for child in children:
-                    name = id2name[child]
-                    key = parent + (name,)
-
-                    self.serialized[key[1:]] = child
-                    new_level.append((key, parent2children[child]))
-            level = new_level
-
     def drill(self, coord):
-        children = self._db.get_child_coordinates(
-            self, self.key(coord, False))
-        for name in sorted(children):
-            if name[0]:
-                yield coord + (name[0],)
+        children = self._db.get_childs(self, self.key(coord, False))
+        for cid, name in sorted(children):
+            if name is not None:
+                yield coord + (name,)
 
     def explode(self, coord):
         if '*' not in coord:
@@ -90,6 +70,6 @@ class Tree(Dimension):
             if val != '*':
                 continue
             for new_val in self.drill(coord[:pos]):
-                sub_coord = tuple(new_val) + coord[pos+1:]
+                sub_coord = new_val + coord[pos+1:]
                 for r in self.explode(sub_coord):
                     yield r

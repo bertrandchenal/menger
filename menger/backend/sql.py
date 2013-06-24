@@ -17,9 +17,10 @@ class SqlBackend(BaseBackend):
     def flush(self, flush_read_cache=False):
         to_update = {}
         to_insert = {}
+
         for key, old_values in self.get(self.write_buffer, True):
             values = self.write_buffer[key]
-            if old_values:
+            if any(old_values):
                 to_update[key] = tuple(imap(add, old_values, values))
             else:
                 to_insert[key] = values
