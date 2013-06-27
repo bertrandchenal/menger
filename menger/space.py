@@ -107,7 +107,7 @@ class Space:
     @classmethod
     def fetch(cls, **point):
         keys = (cls.key(point, False),)
-        return cls._db.fetch(keys).next()
+        return cls._db.fetch(iter(keys)).next()
 
     @classmethod
     def dice(cls, point, skipzero=False):
