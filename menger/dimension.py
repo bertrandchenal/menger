@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import chain
 
+
 class Dimension(object):
 
     def __init__(self, label, type='varchar'):
@@ -51,7 +52,7 @@ class Tree(Dimension):
             parent = self.key(coord[:-1])
             name = coord[-1]
 
-        new_id = self._db.create_coordinate(self, name , parent)
+        new_id = self._db.create_coordinate(self, name, parent)
         self.id_cache[coord] = new_id
         return new_id
 

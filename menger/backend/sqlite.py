@@ -7,13 +7,10 @@ from sql import SqlBackend
 class SqliteBackend(SqlBackend):
 
     def __init__(self, path):
-        self.space = None
         self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA journal_mode=WAL')
-        self.write_buffer = {}
-        self.read_cache = {}
-        self.old_read_cache = {}
+        super(SqlBackend, self).__init__()
 
     def close(self):
         super(SqliteBackend, self).close()
@@ -23,33 +20,33 @@ class SqliteBackend(SqlBackend):
         self.space = space
         self.cursor.execute('PRAGMA foreign_keys=1')
         for dim_name, dim in space._dimensions:
-            name = '%s_%s' % (space._name, dim_name)
+            dim_table = '%s_%s' % (space._name, dim_name)
 
             # Dimension table
             self.cursor.execute(
-                'CREATE TABLE IF NOT EXISTS %s ( '\
-                    'id INTEGER PRIMARY KEY, '\
-                    'name %s)' % (name, dim.type))
+                'CREATE TABLE IF NOT EXISTS %s ( '
+                'id INTEGER PRIMARY KEY, '
+                'name %s)' % (dim_table, dim.type))
 
             # Closure table for the dimension
-            cls_table = name + '_closure'
+            cls_table = dim_table + '_closure'
             self.cursor.execute(
-                'CREATE TABLE IF NOT EXISTS %s (' \
-                    'parent INTEGER, '\
-                    'child INTEGER, '\
-                    'depth INTEGER)' % cls_table)
+                'CREATE TABLE IF NOT EXISTS %s ('
+                'parent INTEGER  references %s (id), '
+                'child INTEGER  references %s (id), '
+                'depth INTEGER)' % (cls_table, dim_table, dim_table))
 
             self.cursor.execute(
-                'CREATE INDEX IF NOT EXISTS %s_cls_index '\
-                    'ON %s (parent, child)' % (cls_table, cls_table))
+                'CREATE INDEX IF NOT EXISTS %s_cls_index '
+                'ON %s (parent, child)' % (cls_table, cls_table))
 
         # Space (main) table
         cols = ','.join(chain(
-                ('%s INTEGER references %s_%s (id) NOT NULL' % (
-                        i, space._name, i
-                        ) for i, _ in space._dimensions),
-                ('%s %s NOT NULL' % (i, m.type) for i, m in space._measures)
-                ))
+            ('%s INTEGER references %s_%s (id) NOT NULL' % (
+                i, space._name, i
+            ) for i, _ in space._dimensions),
+            ('%s %s NOT NULL' % (i, m.type) for i, m in space._measures)
+        ))
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space._name, cols)
         self.cursor.execute(query)
 
@@ -58,8 +55,8 @@ class SqliteBackend(SqlBackend):
                 space._name,
                 space._name,
                 ','.join(d for d, _ in space._dimensions)
-                )
             )
+        )
 
     def create_coordinate(self, dim, name, parent_id):
         table = "%s_%s" % (self.space._name, dim._name)
@@ -114,12 +111,13 @@ class SqliteBackend(SqlBackend):
         if not flushing:
             first = next(keys)
             stm += ' and '.join(map(
-                    self.build_clause,
-                    zip(first, self.space._dimensions)
-                    ))
+                self.build_clause,
+                zip(first, self.space._dimensions)
+            ))
             keys = chain((first,), keys)
         else:
-            stm += ' and '.join("%s = ?" % d for d, _ in self.space._dimensions)
+            stm += ' and '.join(
+                "%s = ?" % d for d, _ in self.space._dimensions)
 
         for key in keys:
             if key in self.read_cache:
@@ -145,7 +143,7 @@ class SqliteBackend(SqlBackend):
 
     def update(self, values):
         set_stm = ','.join('%s = ?' % m for m, _ in self.space._measures)
-        clause =  ' and '.join('%s = ?' % d for d, _ in self.space._dimensions)
+        clause = ' and '.join('%s = ?' % d for d, _ in self.space._dimensions)
         update_stm = 'UPDATE %s SET %s WHERE %s' % (
             self.space._name, set_stm, clause)
 
@@ -154,9 +152,9 @@ class SqliteBackend(SqlBackend):
 
     def insert(self, values):
         fields = tuple(chain(
-                (m for m, _ in self.space._measures),
-                (d for d, _ in self.space._dimensions)
-                ))
+            (m for m, _ in self.space._measures),
+            (d for d, _ in self.space._dimensions)
+        ))
         val_stm = ','.join('?' for f in fields)
         field_stm = ','.join(fields)
         insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (

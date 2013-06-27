@@ -10,6 +10,7 @@ import measure
 
 SPACES = {}
 
+
 class MetaSpace(type):
 
     def __new__(cls, name, bases, attrs):
@@ -35,7 +36,8 @@ class MetaSpace(type):
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
                 dimensions.append((k, v))
-                v._name = k # TODO use name instead of _name (the _ doesnt make sense )
+                # TODO use name instead of _name (the _ doesnt make sense )
+                v._name = k
 
             # Collect measures
             if isinstance(v, measure.Measure):
@@ -87,8 +89,8 @@ class Space:
     @classmethod
     def key(cls, point, create=False):
         return tuple(
-            dim.key(point.get(name, tuple()), create=create) \
-                for name, dim in cls._dimensions)
+            dim.key(point.get(name, tuple()), create=create)
+            for name, dim in cls._dimensions)
 
     @classmethod
     def load(cls, points):

@@ -1,7 +1,13 @@
 from itertools import imap, izip, repeat
 from operator import add
 
+
 class BaseBackend(object):
+
+    def __init__(self):
+        self.space = None
+        self.write_buffer = {}
+        self.read_cache = {}
 
     def build_space(self, name):
         from .. import space, dimension, measure
@@ -20,7 +26,7 @@ class BaseBackend(object):
                 attributes[col_name] = measure.Sum(col_name, type=dim_type)
             else:
                 raise Exception('Unknow type %s (on column %s)' % (
-                        col_type, col_name))
+                    col_type, col_name))
 
         return type(name, (space.Space,), attributes)
 
@@ -35,6 +41,5 @@ class BaseBackend(object):
                 inc = self.write_buffer.get(key)
                 res = tuple(imap(add, res, inc))
             yield dict(izip(
-                    (m for m, _ in self.space._measures),
-                    res))
-
+                (m for m, _ in self.space._measures),
+                res))
