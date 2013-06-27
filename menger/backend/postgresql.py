@@ -95,10 +95,10 @@ class PGBackend(SqlBackend):
         closure = table + '_closure'
 
         if parent_id is None:
-            stm = "SELECT id, name from %s where name is null" % table
+            stm = "SELECT name, id from %s where name is null" % table
             args = tuple()
         else:
-            stm = 'SELECT d.id, d.name ' \
+            stm = 'SELECT d.name, d.id ' \
                 'FROM %s AS c JOIN %s AS d ON (c.child = d.id) '\
                 'WHERE c.depth = 1 AND c.parent = %%s' % (closure, table)
             args = (parent_id,)

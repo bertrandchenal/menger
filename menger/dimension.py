@@ -37,10 +37,10 @@ class Tree(Dimension):
 
         if coord:
             key = self.key(parent, False)
-            for cid, name in self._db.get_childs(self, key):
+            for name, cid in self._db.get_childs(self, key):
                 self.id_cache[parent + (name,)] = cid
         else:
-            for cid, name in self._db.get_childs(self, None):
+            for name, cid in self._db.get_childs(self, None):
                 self.id_cache[parent] = cid
 
         return self.id_cache.get(coord)
@@ -58,7 +58,7 @@ class Tree(Dimension):
 
     def drill(self, coord):
         children = self._db.get_childs(self, self.key(coord, False))
-        for cid, name in sorted(children):
+        for name, cid in sorted(children):
             if name is not None:
                 yield coord + (name,)
 
