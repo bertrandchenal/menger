@@ -130,7 +130,6 @@ class SqliteBackend(SqlBackend):
             if key in self.read_cache:
                 yield key, self.read_cache[key]
                 continue
-            print stm.replace('?', '%s') % key
             values = self.cursor.execute(stm, key).fetchone()
 
             self.read_cache[key] = values
