@@ -105,41 +105,43 @@ class SqliteBackend(SqlBackend):
 
         select = ','.join(
             'coalesce(sum(%s), 0)' % m for m, _ in self.space._measures)
-
         table = self.space._name
-        stm = 'SELECT %s FROM %s WHERE ' % (select, table)
+        tail = ''
+
         if not flushing:
             first = next(keys)
-            stm += ' and '.join(map(
-                self.build_clause,
-                zip(first, self.space._dimensions)
-            ))
+            wheres = []
+            for coord, (dname, dim) in zip(first, self.space._dimensions):
+                if coord == dim.key(tuple()):
+                    wheres.append("%s = ?" % dname)
+                else:
+                    tail += self.build_join(table, dname)
+            if wheres:
+                tail += ' WHERE ' + ' and '.join(wheres)
             keys = chain((first,), keys)
+
         else:
-            stm += ' and '.join(
+            tail = 'WHERE ' + ' and '.join(
                 "%s = ?" % d for d, _ in self.space._dimensions)
+
+        stm = 'SELECT %s FROM %s %s' % (select, table, tail)
 
         for key in keys:
             if key in self.read_cache:
                 yield key, self.read_cache[key]
                 continue
+            print stm.replace('?', '%s') % key
             values = self.cursor.execute(stm, key).fetchone()
 
             self.read_cache[key] = values
             yield key, values
 
-    def build_clause(self, args):
-        key, (dname, dim) = args
-        if key == dim.key(tuple()):
-            return "%s = ?" % dname
-
-        #TODO comparer les perfs avec un join
+    def build_join(self, spc, dname):
         #TODO tester les perfs si on a une colonne "leaf BOOLEAN" pour
         #booster les subselect
-
-        table = dim._spc._name
-        return "%s in (SELECT child from %s_%s_closure WHERE parent = ?"\
-            ")" % (dname, table, dname)
+        cls = "%s_%s_closure" % (spc, dname)
+        return " JOIN %s ON (%s.%s = %s.child and %s.parent = ?)" \
+            % (cls, spc, dname, cls, cls)
 
     def update(self, values):
         set_stm = ','.join('%s = ?' % m for m, _ in self.space._measures)
