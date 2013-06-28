@@ -113,7 +113,7 @@ class SqliteBackend(SqlBackend):
             wheres = []
             for coord, (dname, dim) in zip(first, self.space._dimensions):
                 if coord == dim.key(tuple()):
-                    wheres.append("%s = ?" % dname)
+                    wheres.append("%s = :%s" % (dname, dname))
                 else:
                     tail += self.build_join(table, dname)
             if wheres:
@@ -130,7 +130,13 @@ class SqliteBackend(SqlBackend):
             if key in self.read_cache:
                 yield key, self.read_cache[key]
                 continue
-            values = self.cursor.execute(stm, key).fetchone()
+
+            if not flushing:
+                params = dict(zip((d[0] for d in self.space._dimensions), key))
+                values = self.cursor.execute(stm, params).fetchone()
+
+            else:
+                values = self.cursor.execute(stm, key).fetchone()
 
             self.read_cache[key] = values
             yield key, values
@@ -139,8 +145,8 @@ class SqliteBackend(SqlBackend):
         #TODO tester les perfs si on a une colonne "leaf BOOLEAN" pour
         #booster les subselect
         cls = "%s_%s_closure" % (spc, dname)
-        return " JOIN %s ON (%s.%s = %s.child and %s.parent = ?)" \
-            % (cls, spc, dname, cls, cls)
+        return " JOIN %s ON (%s.%s = %s.child and %s.parent = :%s)" \
+            % (cls, spc, dname, cls, cls, dname)
 
     def update(self, values):
         set_stm = ','.join('%s = ?' % m for m, _ in self.space._measures)
