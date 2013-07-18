@@ -112,6 +112,11 @@ class Space:
         return cls._db.fetch(iter(keys)).next()
 
     @classmethod
+    def get(cls, point):
+        key = cls.key(point, False)
+        return cls._db.get(key)
+
+    @classmethod
     def dice(cls, point, skipzero=False):
         points = list(cls.drill(point))
         results = cls.fetchmany(points, skipzero=skipzero)
