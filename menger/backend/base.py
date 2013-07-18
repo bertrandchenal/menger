@@ -6,8 +6,6 @@ class BaseBackend(object):
 
     def __init__(self):
         self.space = None
-        self.write_buffer = {}
-        self.read_cache = {}
 
     def build_space(self, name):
         from .. import space, dimension, measure
@@ -31,15 +29,16 @@ class BaseBackend(object):
         return type(name, (space.Space,), attributes)
 
     def fetch(self, keys, skipzero=False):
-        for key, res in self.get(keys):
-            if not any(res):
-                if skipzero:
-                    continue
-                res = repeat(0)
+        for key in keys:
+            vals = self.get_cache(key)
+            if vals is None:
+                vals = self.get(key)
 
-            if key in self.write_buffer:
-                inc = self.write_buffer.get(key)
-                res = tuple(imap(add, res, inc))
-            yield dict(izip(
-                (m for m, _ in self.space._measures),
-                res))
+                if vals:
+                    self.insert_cache(key, vals)
+                elif skipzero:
+                    continue
+                else:
+                    vals = repeat(0)
+
+            yield dict(izip((m[0] for m in self.space._measures), vals))

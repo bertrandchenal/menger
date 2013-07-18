@@ -35,7 +35,6 @@ class Cli(object):
         if data_point is None:
             bckd = backend.get_backend(self.uri)
             self.space = bckd.build_space(self.name)
-            bckd.close()
         else:
             self.space = build_space(data_point, self.name)
         return self.space.connect(self.uri)
@@ -119,7 +118,7 @@ def main():
 
     args = {}
     for key in ('db', 'name', 'action'):
-        args[key] = config_args.get(key) or getattr(parse_args, key)
+        args[key] = config_args.get(key) or getattr(parse_args, key) #FIXME cli options should taks precedence on config file
 
     cli = Cli(**args)
     if not hasattr(cli, 'do_' + cli.action):

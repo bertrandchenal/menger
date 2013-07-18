@@ -65,7 +65,7 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
-    MAX_CACHE = 10000
+    MAX_CACHE = 100000
 
     @classmethod
     @contextmanager
@@ -82,11 +82,6 @@ class Space:
         cls._db.close()
 
     @classmethod
-    def aggregates(cls, point):
-        for name, dim in cls._dimensions:
-            yield (dim.key(tuple()), dim.key(tuple(point[name])))
-
-    @classmethod
     def key(cls, point, create=False):
         return tuple(
             dim.key(point.get(name, tuple()), create=create)
@@ -94,10 +89,17 @@ class Space:
 
     @classmethod
     def load(cls, points):
+        cls._db.increment(cls.convert(points))
+
+    @classmethod
+    def convert(cls, points):
+        """
+        Convert 'raw' a list of points into a list of tuple (key, values)
+        """
         for point in points:
             values = tuple(point[m] for m, _ in cls._measures)
-            for coords in product(*tuple(cls.aggregates(point))):
-                cls._db.increment(coords, values)
+            coords = tuple(d.key(tuple(point[n])) for n, d in cls._dimensions)
+            yield coords, values
 
     @classmethod
     def fetchmany(cls, points, skipzero=False):
