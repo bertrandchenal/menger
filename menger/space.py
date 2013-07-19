@@ -83,9 +83,14 @@ class Space:
 
     @classmethod
     def key(cls, point, create=False):
-        return tuple(
+        key = tuple(
             dim.key(point.get(name, tuple()), create=create)
             for name, dim in cls._dimensions)
+        if not create:
+            # When create is false one of the coord may be None
+            if not all(key):
+                return None
+        return key
 
     @classmethod
     def load(cls, points):
@@ -108,12 +113,13 @@ class Space:
 
     @classmethod
     def fetch(cls, **point):
-        keys = (cls.key(point, False),)
-        return cls._db.fetch(iter(keys)).next()
+        return next(cls.fetchmany((point,)))
 
     @classmethod
     def get(cls, point):
         key = cls.key(point, False)
+        if key is None:
+            return tuple(0 for m in cls._measures)
         return cls._db.get(key)
 
     @classmethod

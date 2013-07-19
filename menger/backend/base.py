@@ -30,15 +30,21 @@ class BaseBackend(object):
 
     def fetch(self, keys, skipzero=False):
         for key in keys:
-            vals = self.get_cache(key)
-            if vals is None:
-                vals = self.get(key)
 
-                if vals:
-                    self.insert_cache(key, vals)
-                elif skipzero:
+            if key is None:
+                if skipzero:
                     continue
-                else:
-                    vals = repeat(0)
+                vals = repeat(0)
+
+            else:
+                vals = self.get_cache(key)
+                if vals is None:
+                    vals = self.get(key)
+                    if vals:
+                        self.insert_cache(key, vals)
+                    elif skipzero:
+                        continue
+                    else:
+                        vals = repeat(0)
 
             yield dict(izip((m[0] for m in self.space._measures), vals))
