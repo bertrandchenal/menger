@@ -22,6 +22,7 @@ import os
 from itertools import chain, izip
 
 from menger import build_space, backend
+from menger.space import UserError
 
 class Cli(object):
 
@@ -45,28 +46,44 @@ class Cli(object):
             query_dims = []
             for name, values in self.split_args():
                 point[name] = values
-                query_dims.append(name)
+                if '*' in values:
+                    query_dims.append(name)
+
+            try:
+                results = self.space.dice(point)
+            except UserError, e:
+                print 'Error:', e
+                return
 
             print '\t'.join(chain(
                     query_dims,
-                    (m for m, _ in self.space._measures)
+                    (m.name for m in self.space._measures)
                     ))
 
-            for res in self.space.dice(point, skipzero=True):
-                dims = ('/'.join(map(str, res[d])) for d in query_dims)
-                msrs = (str(res[m]) for m, _ in self.space._measures)
-                print '\t'.join(chain(dims, msrs))
+            for res in results:
+                print '\t'.join(map(str, res))
 
     def do_drill(self):
         with self.connect():
             for name, values in self.split_args():
                 self.drill(name, values)
 
+    def do_info(self):
+        with self.connect():
+            print 'Dimensions'
+            for dim in self.space._dimensions:
+                print ' ' + dim.name
+            print 'Measures'
+            for msr in self.space._measures:
+                print ' ' + msr.name
+
     def drill(self, name, values):
         dim = getattr(self.space, name)
-        for sibling in dim.explode(values):
-            for res in dim.drill(sibling):
-                print '/'.join(map(str, res))
+        key = dim.key(values, False)
+        if key is None:
+            return
+        for name in dim.drill(key):
+            print '/'.join(values + (name,))
 
     def do_load(self):
         for path in self.action_args:
@@ -104,7 +121,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Menger CLI.')
 
-    parser.add_argument('action', help='drill, fetch or load', nargs='+')
+    parser.add_argument('action', help='drill, fetch, info or load', nargs='+')
     parser.add_argument('--db', '-d', help='Database URI', default="mng.db")
     parser.add_argument('--name', '-n', help='Space name', default="Space")
 

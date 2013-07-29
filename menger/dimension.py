@@ -8,12 +8,13 @@ class Dimension(object):
         self.label = label
         self.type = type
         self.id_cache = {}
-        self._db = None
-        self._spc = None
-        # TODO init dim.table and dim.closure_table
+        self.db = None
+        self.spc = None
+        self.name = None
+        self.maxdepth = None
 
     def set_db(self, db):
-        self._db = db
+        self.db = db
         self.serialized = {}
 
 
@@ -37,12 +38,11 @@ class Tree(Dimension):
 
         if coord:
             key = self.key(parent, False)
-            for name, cid in self._db.get_childs(self, key):
+            for name, cid in self.db.get_childs(self, key):
                 self.id_cache[parent + (name,)] = cid
         else:
-            for name, cid in self._db.get_childs(self, None):
+            for name, cid in self.db.get_childs(self, None):
                 self.id_cache[parent] = cid
-
         return self.id_cache.get(coord)
 
     def create_id(self, coord):
@@ -52,25 +52,34 @@ class Tree(Dimension):
             parent = self.key(coord[:-1])
             name = coord[-1]
 
-        new_id = self._db.create_coordinate(self, name, parent)
+        new_id = self.db.create_coordinate(self, name, parent)
         self.id_cache[coord] = new_id
         return new_id
 
-    def drill(self, coord):
-        children = self._db.get_childs(self, self.key(coord, False))
+    def drill(self, key):
+        children = self.db.get_childs(self, key)
         for name, cid in sorted(children):
-            if name is not None:
-                yield coord + (name,)
+            yield name
 
     def explode(self, coord):
+        if coord is None:
+            return None, None
+
         if '*' not in coord:
-            yield coord
-            return
+            key = self.key(coord, False)
+            if key is None:
+                self.unknow_coord(coord)
+            return key, 0
 
         for pos, val in enumerate(coord):
             if val != '*':
                 continue
-            for new_val in self.drill(coord[:pos]):
-                sub_coord = new_val + coord[pos+1:]
-                for r in self.explode(sub_coord):
-                    yield r
+            key = self.key(coord[:pos], False)
+            if key is None:
+                self.unknow_coord(coord)
+            return key, len(coord) - pos
+
+    def unknow_coord(self, coord):
+        from . import space
+        raise space.UserError('"%s" on dimension "%s" is unknown' % (
+                '/'.join(map(str, coord)), self.name))

@@ -13,7 +13,7 @@ class BaseBackend(object):
         columns = list(self.get_columns_info(name.lower()))
 
         if len(columns) == 0:
-            return None
+            return None #FIXME better behaviour needed
 
         attributes = {}
         # FIXME "dim_type" is not a good name
@@ -27,24 +27,3 @@ class BaseBackend(object):
                     col_type, col_name))
 
         return type(name, (space.Space,), attributes)
-
-    def fetch(self, keys, skipzero=False):
-        for key in keys:
-
-            if key is None:
-                if skipzero:
-                    continue
-                vals = repeat(0)
-
-            else:
-                vals = self.get_cache(key)
-                if vals is None:
-                    vals = self.get(key)
-                    if vals:
-                        self.insert_cache(key, vals)
-                    elif skipzero:
-                        continue
-                    else:
-                        vals = repeat(0)
-
-            yield dict(izip((m[0] for m in self.space._measures), vals))

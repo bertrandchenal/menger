@@ -11,4 +11,3 @@ class SqlBackend(BaseBackend):
                 self.update(key, vals)
             else:
                 self.insert(key, vals)
-            self.update_cache(key, vals)

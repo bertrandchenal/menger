@@ -1,4 +1,4 @@
-from itertools import chain
+from itertools import chain, repeat
 import sqlite3
 
 from sql import SqlBackend
@@ -13,7 +13,6 @@ class SqliteBackend(SqlBackend):
         super(SqlBackend, self).__init__()
 
     def close(self):
-        self.clean_cache()
         self.connection.commit()
         self.connection.close()
 
@@ -21,9 +20,8 @@ class SqliteBackend(SqlBackend):
         self.space = space
         self.cursor.execute('PRAGMA foreign_keys=1')
         space_table = space._name
-        cache_table = space_table + '__cache'
-        for dim_name, dim in space._dimensions:
-            dim_table = '%s_%s' % (space_table, dim_name)
+        for dim in space._dimensions:
+            dim_table = '%s_%s' % (space_table, dim.name)
 
             # Dimension table
             self.cursor.execute(
@@ -46,46 +44,30 @@ class SqliteBackend(SqlBackend):
         # Space (main) table
         cols = ','.join(chain(
             ('%s INTEGER references %s_%s (id) NOT NULL' % (
-                i, space_table, i
-            ) for i, _ in space._dimensions),
-            ('%s %s NOT NULL' % (i, m.type) for i, m in space._measures)
+                dim.name, space_table, dim.name
+            ) for dim in space._dimensions),
+            ('%s %s NOT NULL' % (msr.name, msr.type) for msr in space._measures)
         ))
+        query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (
+            space_table, cols)
+        self.cursor.execute(query)
 
-
-        for table in (space_table, cache_table):
-            extra_col = ''
-            if table == cache_table:
-                extra_col = ",last_read INT(4) DEFAULT (strftime('%s','now'))"
-            query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (
-                table, cols + extra_col)
-
-            self.cursor.execute(query)
-
+        for d in space._dimensions:
             self.cursor.execute(
-                'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on %s (%s)' % (
-                    table,
-                    table,
-                    ','.join(d for d, _ in space._dimensions)
+                'CREATE INDEX IF NOT EXISTS %s_%s_index on %s (%s)' % (
+                    space_table,
+                    d.name,
+                    space_table,
+                    d.name
                     )
                 )
 
-        measures = [m[0] for m in self.space._measures]
-        dimensions = [d[0] for d in self.space._dimensions]
+        measures = [m.name for m in self.space._measures]
+        dimensions = [d.name for d in self.space._dimensions]
 
         # exist_stm
         dim_where = 'WHERE ' + ' and '.join("%s = ?" % d for d in dimensions)
         self.exist_stm = 'SELECT 1 FROM %s %s' % (space_table, dim_where)
-
-        # get_cache_stm
-        msr_select = ','.join(measures)
-        self.get_cache_stm = 'SELECT %s FROM %s %s' % (
-            msr_select, cache_table, dim_where)
-
-        # insert_cache_stm
-        fields = list(chain(measures, dimensions))
-        values = ','.join('?' for f in fields)
-        self.insert_cache_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
-            cache_table, ','.join(fields), values)
 
         # update_stm
         set_stm = ','.join('%s = ?' % m for m in measures)
@@ -101,36 +83,9 @@ class SqliteBackend(SqlBackend):
         self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
-        # update_cache_stm
-        set_values = ','.join('%s = %s + ?' % (m, m) for m in measures)
-        conds = [self.parent_cond(space_table, d) for d in dimensions]
-        where = ' AND '.join(conds)
-        self.update_cache_stm = 'UPDATE %s SET %s WHERE %s' % (
-            cache_table, set_values, where)
-
-        # set_cache_timestamp_stm
-        where = ' AND '.join('%s = ?' % d for d in dimensions)
-        self.set_cache_timestamp_stm = "UPDATE %s SET "\
-            "last_read = strftime('%%s','now') WHERE %s" % (cache_table, where)
-
-        # test_cache_stm
-        self.test_cache_stm = 'SELECT count(1) FROM %s' % cache_table
-
-        # delete_cache_stm
-        self.delete_cache_stm = 'DELETE FROM %s '\
-            'WHERE last_read in (SELECT min(last_read) FROM %s)' % (
-            cache_table, cache_table)
-
-    def clean_cache(self):
-        while True:
-            self.cursor.execute(self.test_cache_stm)
-            if self.cursor.fetchone()[0] > self.space.MAX_CACHE:
-                self.cursor.execute(self.delete_cache_stm)
-            else:
-                break
 
     def create_coordinate(self, dim, name, parent_id):
-        table = "%s_%s" % (self.space._name, dim._name)
+        table = "%s_%s" % (self.space._name, dim.name)
         closure = table + '_closure'
 
         # Fill dimension table
@@ -151,8 +106,8 @@ class SqliteBackend(SqlBackend):
 
         return last_id
 
-    def get_childs(self, dim, parent_id):
-        table = "%s_%s" % (self.space._name, dim._name)
+    def get_childs(self, dim, parent_id, depth=1):
+        table = "%s_%s" % (self.space._name, dim.name)
         closure = table + '_closure'
 
         if parent_id is None:
@@ -161,52 +116,67 @@ class SqliteBackend(SqlBackend):
         else:
             stm = 'SELECT d.name, d.id ' \
                 'FROM %s AS c JOIN %s AS d ON (c.child = d.id) '\
-                'WHERE c.depth = 1 AND c.parent = ?' % (closure, table)
-            args = (parent_id,)
+                'WHERE c.depth = ? AND c.parent = ?' % (closure, table)
+            args = (depth, parent_id)
+
         return self.cursor.execute(stm, args)
 
     def exist(self, key):
         values = self.cursor.execute(self.exist_stm, key).fetchone()
         return values
 
-    def get_cache(self, key):
-        values = self.cursor.execute(self.get_cache_stm, key).fetchone()
-        if values:
-            self.cursor.execute(self.set_cache_timestamp_stm, key)
-        return values
-
-    def insert_cache(self, key, values):
-        self.cursor.execute(self.insert_cache_stm, values + key)
-
-    def update_cache(self, key, values):
-        self.cursor.execute(self.update_cache_stm, values + key)
-
-    def parent_cond(self, spc, dname):
-        cls = "%s_%s_closure" % (spc, dname)
-        return " (%s in ("\
-            "SELECT parent FROM %s WHERE child = :%s AND depth > 0)) " \
-            % (dname, cls, dname)
-
-    def get(self, key):
+    def get(self, key, depths=None):
         table = self.space._name
-        select = ','.join(
-            'coalesce(sum(%s), 0)' % m for m, _ in self.space._measures)
-        tail = ''
-        for coord, (dname, dim) in zip(key, self.space._dimensions):
-            if coord != dim.key(tuple()):
-                tail += self.child_join(table, dname)
+        if depths is None:
+            depths = repeat(0)
+        select = []
+        joins = []
+        where = []
+        group_by = []
+        params = {}
+        items = zip(key, depths, self.space._dimensions)
+        for coord, depth, dim in items:
+            if coord is None:
+                continue
+            params[dim.name] = coord
+            if depth > 0:
+                joins.append(self.child_join(table, dim))
+                f = '%s_%s.name'% (table, dim.name)
+                select.append(f)
+                group_by.append(f)
+                group_by.append('%s_%s_closure.parent'% (table, dim.name))
+                params[dim.name + '_depth'] = depth
+            else:
+                cls = "%s_%s_closure" % (table, dim.name)
+                where.append(
+                    '%s.%s IN (SELECT child FROM %s WHERE parent = :%s)'\
+                        % (table, dim.name, cls, dim.name)
+                    )
 
-        stm = 'SELECT %s FROM %s %s' % (select, table, tail)
-        params = dict(zip((d[0] for d in self.space._dimensions), key))
-        return self.cursor.execute(stm, params).fetchone()
+        select.extend('sum(%s)' % m.name for m in self.space._measures)
+        stm = 'SELECT %s FROM %s' % (','.join(select), table)
 
-    def child_join(self, spc, dname):
-        #TODO tester les perfs si on a une colonne "leaf BOOLEAN" pour
-        #booster les subselect
-        cls = "%s_%s_closure" % (spc, dname)
-        return " JOIN %s ON (%s.%s = %s.child and %s.parent = :%s)" \
-            % (cls, spc, dname, cls, cls, dname)
+        if joins:
+            stm += ' ' + ' '.join(joins)
+        if where:
+            stm += ' WHERE ' +  ' AND '.join(where)
+        if group_by:
+            stm += ' GROUP BY ' + ','.join(group_by)
 
+        return self.cursor.execute(stm, params)
+
+    def child_join(self, spc, dim):
+        cls = "%s_%s_closure" % (spc, dim.name)
+        dim_table = "%s_%s" % (spc, dim.name)
+        # TODO it's better to define get_name on dimension table (populated
+        # in one query on dim table) than doing the extra join here
+        join = "JOIN %s ON (%s.child = %s.%s " \
+            " AND %s.parent IN (SELECT child from %s WHERE parent = :%s" \
+            " AND depth = :%s))" \
+            "JOIN %s ON (%s.parent = %s.id)" \
+            % (cls, cls, spc, dim.name, cls, cls, dim.name,
+               dim.name + '_depth', dim_table, cls, dim_table)
+        return join
 
     def update(self, k, v):
         self.cursor.execute(self.update_stm, v + k)
