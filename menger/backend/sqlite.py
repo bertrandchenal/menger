@@ -173,7 +173,7 @@ class SqliteBackend(SqlBackend):
         join = "JOIN %s ON (%s.child = %s.%s " \
             " AND %s.parent IN (SELECT child from %s WHERE parent = :%s" \
             " AND depth = :%s))" \
-            "JOIN %s ON (%s.parent = %s.id)" \
+            " JOIN %s ON (%s.parent = %s.id)" \
             % (cls, cls, spc, dim.name, cls, cls, dim.name,
                dim.name + '_depth', dim_table, cls, dim_table)
         return join
