@@ -43,11 +43,8 @@ class Cli(object):
     def do_fetch(self):
         with self.connect():
             point = {}
-            query_dims = []
             for name, values in self.split_args():
                 point[name] = values
-                if '*' in values:
-                    query_dims.append(name)
 
             try:
                 results = self.space.dice(point)
@@ -56,7 +53,7 @@ class Cli(object):
                 return
 
             print '\t'.join(chain(
-                    query_dims,
+                    (d.name for d in self.space._dimensions if d.name in point),
                     (m.name for m in self.space._measures)
                     ))
 
