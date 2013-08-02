@@ -42,7 +42,7 @@ class SqliteBackend(SqlBackend):
                 'ON %s (parent, child)' % (cls_table, cls_table))
 
         # Space (main) table
-        cols = ','.join(chain(
+        cols = ', '.join(chain(
             ('%s INTEGER references %s_%s (id) NOT NULL' % (
                 dim.name, space_table, dim.name
             ) for dim in space._dimensions),
@@ -70,7 +70,7 @@ class SqliteBackend(SqlBackend):
         self.exist_stm = 'SELECT 1 FROM %s %s' % (space_table, dim_where)
 
         # update_stm
-        set_stm = ','.join('%s = ?' % m for m in measures)
+        set_stm = ', '.join('%s = ?' % m for m in measures)
         clause = ' and '.join('%s = ?' % d for d in dimensions)
         self.update_stm = 'UPDATE %s SET %s WHERE %s' % (
             space_table, set_stm, clause)
@@ -78,8 +78,8 @@ class SqliteBackend(SqlBackend):
         #insert_stm
         fields = tuple(chain(dimensions, measures))
 
-        val_stm = ','.join('?' for f in fields)
-        field_stm = ','.join(fields)
+        val_stm = ', '.join('?' for f in fields)
+        field_stm = ', '.join(fields)
         self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
@@ -154,14 +154,14 @@ class SqliteBackend(SqlBackend):
                     )
 
         select.extend('sum(%s)' % m.name for m in self.space._measures)
-        stm = 'SELECT %s FROM %s' % (','.join(select), table)
+        stm = 'SELECT %s FROM %s' % (', '.join(select), table)
 
         if joins:
             stm += ' ' + ' '.join(joins)
         if where:
             stm += ' WHERE ' +  ' AND '.join(where)
         if group_by:
-            stm += ' GROUP BY ' + ','.join(group_by)
+            stm += ' GROUP BY ' + ', '.join(group_by)
 
         return self.cursor.execute(stm, params)
 
@@ -170,7 +170,7 @@ class SqliteBackend(SqlBackend):
         dim_table = "%s_%s" % (spc, dim.name)
         # TODO it's better to define get_name on dimension table (populated
         # in one query on dim table) than doing the extra join here
-        join = "JOIN %s ON (%s.child = %s.%s " \
+        join = "JOIN %s ON (%s.child = %s.%s" \
             " AND %s.parent IN (SELECT child from %s WHERE parent = :%s" \
             " AND depth = :%s))" \
             " JOIN %s ON (%s.parent = %s.id)" \
