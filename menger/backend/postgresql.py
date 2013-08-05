@@ -13,19 +13,17 @@ class PGBackend(SqlBackend):
         super(PGBackend, self).__init__()
 
     def close(self):
-        self.clean_cache()
         self.connection.commit()
         self.connection.close()
 
     def register(self, space):
         self.space = space
         space_table = space._name
-        cache_table = space_table + '__cache'
 
         create_idx = 'CREATE UNIQUE INDEX %s_parent_child_index'\
             ' on %s (parent, child)'
-        for dim_name, dim in space._dimensions:
-            dim_table = '%s_%s' % (space_table, dim_name)
+        for dim in space._dimensions:
+            dim_table = '%s_%s' % (space_table, dim.name)
 
             # Dimension table
             self.cursor.execute(
@@ -51,52 +49,33 @@ class PGBackend(SqlBackend):
         # Space (main) table
         cols = ','.join(chain(
             ('"%s" INTEGER NOT NULL references %s_%s (id)' % (
-                i, space_table, i
-            ) for i, _ in space._dimensions),
-            ('"%s" %s NOT NULL' % (i, m.type) for i, m in space._measures)
+                d.name, space_table, d.name
+            ) for d in space._dimensions),
+            ('"%s" %s NOT NULL' % (m.name, m.type) for m in space._measures)
         ))
 
-        for table in (space_table, cache_table):
-            extra_col = ''
-            if table == cache_table:
-                extra_col = ",last_read INTEGER "\
-                    "DEFAULT extract(epoch from now())::int"
-            query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (
-                table, cols + extra_col)
+        query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space_table, cols)
+        self.cursor.execute(query)
 
+        self.cursor.execute(
+            "SELECT indexname FROM pg_indexes WHERE tablename = %s",
+            (space_table,))
+        all_idx = [x[0] for x in self.cursor.fetchall()]
 
-            self.cursor.execute(query)
-
-            self.cursor.execute(
-                "SELECT 1 FROM pg_indexes "
-                "WHERE tablename = %s AND indexname = %s",
-                (table, table + '_dim_index',))
-
-            if not self.cursor.fetchall():
+        for d in space._dimensions:
+            idx_name = '%s_%s_index' % (space_table, d.name)
+            if idx_name not in all_idx:
                 self.cursor.execute(
-                    'CREATE UNIQUE INDEX %s_dim_index on %s (%s)' % (
-                        table, table,
-                        ','.join('"%s"' % d for d, _ in space._dimensions)
-                        )
+                    'CREATE UNIQUE INDEX %s on %s (%s)' % (
+                        idx_name, space_table, d.name)
                     )
 
-        measures = [m[0] for m in self.space._measures]
-        dimensions = [d[0] for d in self.space._dimensions]
+        measures = [m.name for m in self.space._measures]
+        dimensions = [d.name for d in self.space._dimensions]
 
         # exist_stm
         dim_where = 'WHERE ' + ' and '.join("%s = %%s" % d for d in dimensions)
         self.exist_stm = 'SELECT 1 FROM %s %s' % (space_table, dim_where)
-
-        # get_cache_stm
-        msr_select = ','.join(measures)
-        self.get_cache_stm = 'SELECT %s FROM %s %s' % (
-            msr_select, cache_table, dim_where)
-
-        # insert_cache_stm
-        fields = list(chain(measures, dimensions))
-        values = ','.join('%s' for f in fields)
-        self.insert_cache_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
-            cache_table, ','.join(fields), values)
 
         # update_stm
         set_stm = ','.join('%s = %%s' % m for m in measures)
@@ -112,37 +91,8 @@ class PGBackend(SqlBackend):
         self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
-        # update_cache_stm
-        set_values = ','.join('%s = %s + %%s' % (m, m) for m in measures)
-        conds = [self.parent_cond(space_table, d) for d in dimensions]
-        where = ' AND '.join(conds)
-        self.update_cache_stm = 'UPDATE %s SET %s WHERE %s' % (
-            cache_table, set_values, where)
-
-        # set_cache_timestamp_stm
-        where = ' AND '.join('%s = %%s' % d for d in dimensions)
-        self.set_cache_timestamp_stm = "UPDATE %s SET "\
-            "last_read = extract(epoch from now())::int "\
-            "WHERE %s" % (cache_table, where)
-
-        # test_cache_stm
-        self.test_cache_stm = 'SELECT count(1) FROM %s' % cache_table
-
-        # delete_cache_stm
-        self.delete_cache_stm = 'DELETE FROM %s '\
-            'WHERE last_read in (SELECT min(last_read) FROM %s)' % (
-            cache_table, cache_table)
-
-    def clean_cache(self):
-        while True:
-            self.cursor.execute(self.test_cache_stm)
-            if self.cursor.fetchone()[0] > self.space.MAX_CACHE:
-                self.cursor.execute(self.delete_cache_stm)
-            else:
-                break
-
     def create_coordinate(self, dim, name, parent_id):
-        table = "%s_%s" % (self.space._name, dim._name)
+        table = "%s_%s" % (self.space._name, dim.name)
         closure = table + '_closure'
 
         # Fill dimension table
@@ -164,7 +114,7 @@ class PGBackend(SqlBackend):
         return last_id
 
     def get_childs(self, dim, parent_id):
-        table = "%s_%s" % (self.space._name, dim._name)
+        table = "%s_%s" % (self.space._name, dim.name)
         closure = table + '_closure'
 
         if parent_id is None:
@@ -179,50 +129,70 @@ class PGBackend(SqlBackend):
         self.cursor.execute(stm, args)
         return self.cursor
 
+
+    def get_parents(self, dim):
+        dim_table = "%s_%s" % (self.space._name, dim.name)
+        cls_table = dim_table + '_closure'
+        stm = "SELECT id, name, parent FROM %s"\
+            " JOIN %s ON (child = id) WHERE depth = 1"\
+            %(dim_table, cls_table)
+        self.cursor.execute(stm)
+        return self.cursor
+
     def exist(self, key):
         self.cursor.execute(self.exist_stm, key)
         return self.cursor.fetchone()
 
-    def get_cache(self, key):
-        self.cursor.execute(self.get_cache_stm, key)
-        values = self.cursor.fetchone()
-        if values:
-            self.cursor.execute(self.set_cache_timestamp_stm, key)
-        return values
-
-    def insert_cache(self, key, values):
-        self.cursor.execute(self.insert_cache_stm, values + key)
-
-    def update_cache(self, key, values):
-        self.cursor.execute(self.update_cache_stm, values + key)
-
-    def parent_cond(self, spc, dname):
-        cls = "%s_%s_closure" % (spc, dname)
-        return " (%s in ("\
-            "SELECT parent FROM %s WHERE child = %%s AND depth > 0)) " \
-            % (dname, cls)
-
-    def get(self, key):
+    def get(self, key, depths=None):
         table = self.space._name
-        select = ','.join(
-            'coalesce(sum(%s), 0)' % m for m, _ in self.space._measures)
-        tail = ''
-        for coord, (dname, dim) in zip(key, self.space._dimensions):
-            if coord != dim.key(tuple()):
-                tail += self.child_join(table, dname)
+        if depths is None:
+            depths = repeat(0)
+        select = []
+        joins = []
+        where = []
+        group_by = []
+        params = {}
+        items = zip(key, depths, self.space._dimensions)
+        for coord, depth, dim in items:
+            if coord is None:
+                continue
+            params[dim.name] = coord
+            if depth > 0:
+                joins.append(self.child_join(table, dim))
+                f = '%s_%s_closure.parent'% (table, dim.name)
+                select.append(f)
+                group_by.append(f)
+                params[dim.name + '_depth'] = depth
+            else:
+                cls = "%s_%s_closure" % (table, dim.name)
+                where.append(
+                    '%s.%s IN (SELECT child FROM %s WHERE parent = %%(%s)s)'\
+                        % (table, dim.name, cls, dim.name)
+                    )
 
-        stm = 'SELECT %s FROM %s %s' % (select, table, tail)
-        params = dict(zip((d[0] for d in self.space._dimensions), key))
+        select.extend('sum(%s)' % m.name for m in self.space._measures)
+        stm = 'SELECT %s FROM %s' % (', '.join(select), table)
+
+        if joins:
+            stm += ' ' + ' '.join(joins)
+        if where:
+            stm += ' WHERE ' +  ' AND '.join(where)
+        if group_by:
+            stm += ' GROUP BY ' + ', '.join(group_by)
+
         self.cursor.execute(stm, params)
-        return self.cursor.fetchone()
+        return self.cursor
 
-    def child_join(self, spc, dname):
-        #TODO tester les perfs si on a une colonne "leaf BOOLEAN" pour
-        #booster les subselect
-        cls = "%s_%s_closure" % (spc, dname)
-        return " JOIN %s ON (%s.%s = %s.child and %s.parent = %%(%s)s)" \
-            % (cls, spc, dname, cls, cls, dname)
 
+    def child_join(self, spc, dim):
+        cls = "%s_%s_closure" % (spc, dim.name)
+        dim_table = "%s_%s" % (spc, dim.name)
+        join = "JOIN %s ON (%s.child = %s.%s" \
+            " AND %s.parent IN (SELECT child from %s WHERE parent = %%(%s)s" \
+            " AND depth = %%(%s)s))" \
+            % (cls, cls, spc, dim.name, cls, cls, dim.name,
+               dim.name + '_depth')
+        return join
 
     def update(self, k, v):
         self.cursor.execute(self.update_stm, v + k)
