@@ -118,7 +118,21 @@ class Space:
         key, depths = zip(*list(
                 dim.explode(point.get(dim.name))
                 for dim in cls._dimensions))
-        return cls._db.get(key, depths)
+
+        idx = []
+        for dim, depth in zip(cls._dimensions, depths):
+            if depth is None or depth == 0:
+                continue
+            idx.append(dim)
+        idx_len = len(idx)
+
+        dim_name = lambda i,x: idx[i].get_name(x) if i < idx_len else x
+
+        res = list(cls._db.get(key, depths))
+
+        for pos, r in enumerate(res):
+            res[pos] = tuple(dim_name(pos, x) for pos, x in enumerate(r))
+        return res
 
 
 def build_space(data_point, name):

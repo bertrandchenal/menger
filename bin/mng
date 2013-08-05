@@ -52,8 +52,10 @@ class Cli(object):
                 print 'Error:', e
                 return
 
+            is_col = lambda name: '*' in point.get(name, [])
+
             print '\t'.join(chain(
-                    (d.name for d in self.space._dimensions if d.name in point),
+                    (d.name for d in self.space._dimensions if is_col(d.name)),
                     (m.name for m in self.space._measures)
                     ))
 

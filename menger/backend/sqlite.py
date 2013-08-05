@@ -121,6 +121,14 @@ class SqliteBackend(SqlBackend):
 
         return self.cursor.execute(stm, args)
 
+    def get_parents(self, dim):
+        dim_table = "%s_%s" % (self.space._name, dim.name)
+        cls_table = dim_table + '_closure'
+        stm = "SELECT id, name, parent FROM %s"\
+            " JOIN %s ON (child = id) WHERE depth = 1"\
+            %(dim_table, cls_table)
+        return self.cursor.execute(stm)
+
     def exist(self, key):
         values = self.cursor.execute(self.exist_stm, key).fetchone()
         return values
@@ -141,10 +149,9 @@ class SqliteBackend(SqlBackend):
             params[dim.name] = coord
             if depth > 0:
                 joins.append(self.child_join(table, dim))
-                f = '%s_%s.name'% (table, dim.name)
+                f = '%s_%s_closure.parent'% (table, dim.name)
                 select.append(f)
                 group_by.append(f)
-                group_by.append('%s_%s_closure.parent'% (table, dim.name))
                 params[dim.name + '_depth'] = depth
             else:
                 cls = "%s_%s_closure" % (table, dim.name)
@@ -168,14 +175,11 @@ class SqliteBackend(SqlBackend):
     def child_join(self, spc, dim):
         cls = "%s_%s_closure" % (spc, dim.name)
         dim_table = "%s_%s" % (spc, dim.name)
-        # TODO it's better to define get_name on dimension table (populated
-        # in one query on dim table) than doing the extra join here
         join = "JOIN %s ON (%s.child = %s.%s" \
             " AND %s.parent IN (SELECT child from %s WHERE parent = :%s" \
             " AND depth = :%s))" \
-            " JOIN %s ON (%s.parent = %s.id)" \
             % (cls, cls, spc, dim.name, cls, cls, dim.name,
-               dim.name + '_depth', dim_table, cls, dim_table)
+               dim.name + '_depth')
         return join
 
     def update(self, k, v):
