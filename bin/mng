@@ -43,7 +43,9 @@ class Cli(object):
     def do_fetch(self):
         with self.connect():
             point = {}
-            for name, values in self.split_args():
+            args = list(self.split_args())
+
+            for name, values in args:
                 point[name] = values
 
             try:
@@ -54,13 +56,14 @@ class Cli(object):
 
             is_col = lambda name: '*' in point.get(name, [])
 
-            print '\t'.join(chain(
-                    (d.name for d in self.space._dimensions if is_col(d.name)),
+            cols = list(chain(
+                    (n for n,_ in args if is_col(n)),
                     (m.name for m in self.space._measures)
                     ))
+            print '\t'.join(cols)
 
             for res in results:
-                print '\t'.join(map(str, res))
+                print '\t'.join(str(res[c]) for c in cols)
 
     def do_drill(self):
         with self.connect():
@@ -77,11 +80,12 @@ class Cli(object):
                 print ' ' + msr.name
 
     def drill(self, name, values):
+        if not hasattr(self.space, name):
+            exit('"%s" has no dimension "%s"' % (
+                    self.space._name, name))
+
         dim = getattr(self.space, name)
-        key = dim.key(values, False)
-        if key is None:
-            return
-        for name in dim.drill(key):
+        for name in dim.drill(values):
             print '/'.join(values + (name,))
 
     def do_load(self):

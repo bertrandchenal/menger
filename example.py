@@ -40,22 +40,20 @@ def main(uri):
     # Load and Fetch
     with Item.connect(uri):
         Item.load([{'category': [], 'name': [], 'total': 1, 'amount': 1}])
-        assert Item.fetch()['total'] == 1
+        assert next(Item.dice())['total'] == 1
 
     if uri != 'sqlite:///:memory:':
         with Item.connect(uri):
-            assert Item.fetch()['total'] == 1
+            assert next(Item.dice())['total'] == 1
 
     # Drill
     with Item.connect(uri):
         Item.load(item_data*50)
-        assert tuple(Item.category.drill('A')) == (('A', 'B'),)
-        assert tuple(Item.category.drill('A', 'B')) == (
-            ('A', 'B', 'C'),
-            ('A', 'B', 'D')
-            )
-        assert tuple(Item.category.drill('A', 'B', 'C')) == tuple()
-        assert Item.fetch(category=['A'])['total'] == (15 + 9) * 50
+
+        assert tuple(Item.category.drill(('A',))) == (('B'),)
+        assert tuple(Item.category.drill(('A', 'B'))) == ('C', 'D')
+        assert tuple(Item.category.drill(('A', 'B', 'C'))) == tuple()
+        assert next(Item.dice({'category': ('A',)}))['total'] == 24
 
     # Force cache invalidation
     Test.MAX_CACHE = 100
@@ -64,14 +62,14 @@ def main(uri):
 
     with Test.connect(uri):
         Test.load(items)
-        res = Test.fetch()
+        res = next(Test.dice())
 
         assert res['total'] == 7 * nb_items
         assert res['count'] == 1 * nb_items
 
     with Test.connect(uri):
         for item in items:
-            Test.fetch(**item)
+            Test.dice(item)
         assert len(Test._db.read_cache) < Test.MAX_CACHE
 
 if __name__ == '__main__':

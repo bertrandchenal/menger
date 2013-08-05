@@ -82,7 +82,10 @@ class Tree(Dimension):
         self.name_cache[new_id] = (name, parent)
         return new_id
 
-    def drill(self, key):
+    def drill(self, values):
+        key = self.key(values, False)
+        if key is None:
+            return
         children = self.db.get_childs(self, key)
         for name, cid in sorted(children):
             yield name

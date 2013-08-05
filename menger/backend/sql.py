@@ -5,9 +5,15 @@ from base import BaseBackend
 
 class SqlBackend(BaseBackend):
 
-    def increment(self, keys_vals):
+    def load(self, keys_vals):
+        nb_edit = 0
         for key, vals in keys_vals:
-            if self.exist(key):
+            db_vals = self.get(key)
+            if not db_vals:
+                self.insert(key, vals)
+            elif db_vals != vals:
                 self.update(key, vals)
             else:
-                self.insert(key, vals)
+                continue
+            nb_edit += 1
+        return nb_edit

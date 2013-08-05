@@ -93,7 +93,7 @@ class Space:
 
     @classmethod
     def load(cls, points):
-        cls._db.increment(cls.convert(points))
+        return cls._db.load(cls.convert(points))
 
     @classmethod
     def convert(cls, points):
@@ -111,28 +111,30 @@ class Space:
         key = cls.key(point, False)
         if key is None:
             return tuple(0 for m in cls._measures)
-        return cls._db.get(key)
+        return cls._db.dice(key)
 
     @classmethod
-    def dice(cls, point):
+    def dice(cls, point={}):
         key, depths = zip(*list(
                 dim.explode(point.get(dim.name))
                 for dim in cls._dimensions))
 
-        idx = []
+        key_dims = []
         for dim, depth in zip(cls._dimensions, depths):
             if depth is None or depth == 0:
                 continue
-            idx.append(dim)
-        idx_len = len(idx)
+            key_dims.append(dim)
+        key_dims_len = len(key_dims)
 
-        dim_name = lambda i,x: idx[i].get_name(x) if i < idx_len else x
+        res = cls._db.dice(key, depths)
 
-        res = list(cls._db.get(key, depths))
-
-        for pos, r in enumerate(res):
-            res[pos] = tuple(dim_name(pos, x) for pos, x in enumerate(r))
-        return res
+        for r in res:
+            dict_res = {}
+            for pos, d in enumerate(key_dims):
+                dict_res[d.name] = d.get_name(r[pos])
+            for pos, m in enumerate(cls._measures):
+                dict_res[m.name] = r[pos+key_dims_len]
+            yield dict_res
 
 
 def build_space(data_point, name):

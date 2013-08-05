@@ -65,9 +65,11 @@ class SqliteBackend(SqlBackend):
         measures = [m.name for m in self.space._measures]
         dimensions = [d.name for d in self.space._dimensions]
 
-        # exist_stm
-        dim_where = 'WHERE ' + ' and '.join("%s = ?" % d for d in dimensions)
-        self.exist_stm = 'SELECT 1 FROM %s %s' % (space_table, dim_where)
+        # get_stm
+        select = ', '.join(measures)
+        dim_where = 'WHERE ' + ' AND '.join("%s = ?" % d for d in dimensions)
+        self.get_stm = 'SELECT %s FROM %s %s' % (
+            select, space_table, dim_where)
 
         # update_stm
         set_stm = ', '.join('%s = ?' % m for m in measures)
@@ -103,7 +105,6 @@ class SqliteBackend(SqlBackend):
             ' VALUES (?, ?, ?)' % closure
         self.cursor.executemany(stm, self.cursor.fetchall())
         self.cursor.execute(stm, (last_id, last_id, 0))
-
         return last_id
 
     def get_childs(self, dim, parent_id, depth=1):
@@ -127,13 +128,14 @@ class SqliteBackend(SqlBackend):
         stm = "SELECT id, name, parent FROM %s"\
             " JOIN %s ON (child = id) WHERE depth = 1"\
             %(dim_table, cls_table)
-        return self.cursor.execute(stm)
+        self.cursor.execute(stm)
+        return self.cursor.fetchall()
 
-    def exist(self, key):
-        values = self.cursor.execute(self.exist_stm, key).fetchone()
-        return values
+    def get(self, key):
+        self.cursor.execute(self.get_stm, key)
+        return self.cursor.fetchone()
 
-    def get(self, key, depths=None):
+    def dice(self, key, depths=None):
         table = self.space._name
         if depths is None:
             depths = repeat(0)
@@ -170,7 +172,8 @@ class SqliteBackend(SqlBackend):
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
 
-        return self.cursor.execute(stm, params)
+        self.cursor.execute(stm, params)
+        return self.cursor.fetchall()
 
     def child_join(self, spc, dim):
         cls = "%s_%s_closure" % (spc, dim.name)

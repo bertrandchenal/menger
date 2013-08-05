@@ -62,32 +62,35 @@ class PGBackend(SqlBackend):
             (space_table,))
         all_idx = [x[0] for x in self.cursor.fetchall()]
 
+        # Create one index per dimension
         for d in space._dimensions:
             idx_name = '%s_%s_index' % (space_table, d.name)
             if idx_name not in all_idx:
                 self.cursor.execute(
-                    'CREATE UNIQUE INDEX %s on %s (%s)' % (
+                    'CREATE INDEX %s on %s ("%s")' % (
                         idx_name, space_table, d.name)
                     )
 
         measures = [m.name for m in self.space._measures]
         dimensions = [d.name for d in self.space._dimensions]
 
-        # exist_stm
-        dim_where = 'WHERE ' + ' and '.join("%s = %%s" % d for d in dimensions)
-        self.exist_stm = 'SELECT 1 FROM %s %s' % (space_table, dim_where)
+        # get_stm
+        select = ', '.join(measures)
+        dim_where = 'WHERE ' \
+            + ' AND '.join('"%s" = %%s' % d for d in dimensions)
+        self.get_stm = 'SELECT %s FROM %s %s' % (
+            select, space_table, dim_where)
 
         # update_stm
-        set_stm = ','.join('%s = %%s' % m for m in measures)
-        clause = ' and '.join('%s = %%s' % d for d in dimensions)
+        set_stm = ','.join('"%s" = %%s' % m for m in measures)
+        clause = ' and '.join('"%s" = %%s' % d for d in dimensions)
         self.update_stm = 'UPDATE %s SET %s WHERE %s' % (
             space_table, set_stm, clause)
 
         #insert_stm
         fields = tuple(chain(dimensions, measures))
-
+        field_stm = ','.join('"%s"' % f for f in fields)
         val_stm = ','.join('%s' for f in fields)
-        field_stm = ','.join(fields)
         self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
@@ -137,13 +140,13 @@ class PGBackend(SqlBackend):
             " JOIN %s ON (child = id) WHERE depth = 1"\
             %(dim_table, cls_table)
         self.cursor.execute(stm)
-        return self.cursor
+        return self.cursor.fetchall()
 
-    def exist(self, key):
-        self.cursor.execute(self.exist_stm, key)
+    def get(self, key):
+        self.cursor.execute(self.get_stm, key)
         return self.cursor.fetchone()
 
-    def get(self, key, depths=None):
+    def dice(self, key, depths=None):
         table = self.space._name
         if depths is None:
             depths = repeat(0)
@@ -181,7 +184,7 @@ class PGBackend(SqlBackend):
             stm += ' GROUP BY ' + ', '.join(group_by)
 
         self.cursor.execute(stm, params)
-        return self.cursor
+        return self.cursor.fetchall()
 
 
     def child_join(self, spc, dim):
