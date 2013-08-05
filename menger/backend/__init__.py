@@ -19,10 +19,10 @@ def get_backend(uri):
     """
     uri string examples:
 
-    sqlite:// / foo.db
-    sqlite:// / /absolute/path/to/foo.db
-    postgresql:// scott:tiger@localhost / mydatabase
-    postgresql:// user:password@ / dbname
+    sqlite:///foo.db
+    sqlite:////absolute/path/to/foo.db
+    postgresql://scott:tiger@localhost / mydatabase
+    postgresql://user:password@ / dbname
     """
 
     if not (uri.startswith('sqlite://') or uri.startswith('postgresql://')):
