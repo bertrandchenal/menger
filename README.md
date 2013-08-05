@@ -80,14 +80,15 @@ Full code listing:
         nb_words = measure.Sum('Number of Words')
         nb_typos = measure.Sum('Number of Typos')
 
-    with connect('db/Post', backend='sqlite'): # available backends: 'sqlite' or 'leveldb'
+    db_uri = 'mng.db'
+    with Post.connect(db_uri): # See menger/backend/__init__.py for uri examples
         Post.load([
             {'date': ['2012', '7', '26'], 'author': ['John'], 'nb_words': 148, 'nb_typos': 1},
             {'date': ['2012', '8', '7'], 'author': ['John'], 'nb_words': 34, 'nb_typos': 0},
             {'date': ['2012', '8', '9'], 'author': ['Bill'], 'nb_words': 523, 'nb_typos': 2},
             ])
 
-        print Post.fetch() # gives {'nb_words': 705, 'nb_typos': 3}
-        print Post.fetch(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
+        print Post.dice({}) # gives {'nb_words': 705, 'nb_typos': 3}
+        print Post.dice(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
 
         print list(Post.date.drill('2012'))
