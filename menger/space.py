@@ -114,26 +114,37 @@ class Space:
         return cls._db.dice(key)
 
     @classmethod
-    def dice(cls, point={}):
-        key, depths = zip(*list(
-                dim.explode(point.get(dim.name))
-                for dim in cls._dimensions))
+    def dice(cls, point=[]):
+        if isinstance(point, dict):
+            point = point.items()
 
-        key_dims = []
-        for dim, depth in zip(cls._dimensions, depths):
-            if depth is None or depth == 0:
+        cube = []
+        cube_dims = []
+        cube_msrs = []
+        for name, value in point:
+            if not hasattr(cls, name):
                 continue
-            key_dims.append(dim)
-        key_dims_len = len(key_dims)
+            dim = getattr(cls, name)
 
-        res = cls._db.dice(key, depths)
+            if isinstance(dim, measure.Measure):
+                cube_msrs.append(dim)
+                continue
+            if not isinstance(dim, dimension.Dimension):
+                continue
+            cube_dims.append(dim)
+            coord, depth = dim.explode(value)
+            cube.append((dim, coord, depth))
+
+        cube_dims_len = len(cube_dims)
+
+        res = cls._db.dice(cube, cube_msrs)
 
         for r in res:
             dict_res = {}
-            for pos, d in enumerate(key_dims):
+            for pos, d in enumerate(cube_dims):
                 dict_res[d.name] = d.get_name(r[pos])
-            for pos, m in enumerate(cls._measures):
-                dict_res[m.name] = r[pos+key_dims_len]
+            for pos, m in enumerate(cube_msrs):
+                dict_res[m.name] = r[pos+cube_dims_len]
             yield dict_res
 
 

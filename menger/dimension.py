@@ -63,9 +63,9 @@ class Tree(Dimension):
 
         parent_name = self.get_name(parent)
         if parent_name:
-            res = '%s/%s' % (parent_name, name)
+            res = parent_name + (name,)
         else:
-            res = name
+            res = (name,)
 
         self.full_name_cache[coord_id] = res
         return res

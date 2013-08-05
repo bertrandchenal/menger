@@ -8,7 +8,7 @@ $ mng drill category=Electronics
 Electronics/Television & Video
 Electronics/Computers
 Electronics/Camera & Photo
-$ mng fetch category="Electronics/Television & Video"
+$ mng dice category="Electronics/Television & Video"
 category    total
 Electronics/Television & Video  20.0
 Electronics/Computers  10.0
@@ -40,30 +40,31 @@ class Cli(object):
             self.space = build_space(data_point, self.name)
         return self.space.connect(self.uri)
 
-    def do_fetch(self):
+    def do_dice(self):
         with self.connect():
-            point = {}
             args = list(self.split_args())
 
-            for name, values in args:
-                point[name] = values
+            for pos, (name, values) in enumerate(args):
+                if not values:
+                    args[pos] =  (name, ('*',))
+
+            if not args:
+                args = [(m.name, None) for m in self.space._measures]
 
             try:
-                results = self.space.dice(point)
+                results = self.space.dice(args)
             except UserError, e:
                 print 'Error:', e
                 return
 
-            is_col = lambda name: '*' in point.get(name, [])
-
-            cols = list(chain(
-                    (n for n,_ in args if is_col(n)),
-                    (m.name for m in self.space._measures)
-                    ))
+            cols = list(n for n,_ in args)
             print '\t'.join(cols)
 
             for res in results:
-                print '\t'.join(str(res[c]) for c in cols)
+                for c in cols:
+                    if isinstance(res[c], tuple):
+                        res[c] = '/'.join(map(str, res[c]))
+                print '\t'.join(res[c] for c in cols)
 
     def do_drill(self):
         with self.connect():
@@ -124,7 +125,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Menger CLI.')
 
-    parser.add_argument('action', help='drill, fetch, info or load', nargs='+')
+    parser.add_argument('action', help='drill, dice, info or load', nargs='+')
     parser.add_argument('--db', '-d', help='Database URI', default="mng.db")
     parser.add_argument('--name', '-n', help='Space name', default="Space")
 

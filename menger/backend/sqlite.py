@@ -135,34 +135,23 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(self.get_stm, key)
         return self.cursor.fetchone()
 
-    def dice(self, key, depths=None):
+    def dice(self, cube, msrs):
         table = self.space._name
-        if depths is None:
-            depths = repeat(0)
         select = []
         joins = []
         where = []
         group_by = []
         params = {}
-        items = zip(key, depths, self.space._dimensions)
-        for coord, depth, dim in items:
-            if coord is None:
-                continue
-            params[dim.name] = coord
-            if depth > 0:
-                joins.append(self.child_join(table, dim))
-                f = '%s_%s_closure.parent'% (table, dim.name)
-                select.append(f)
-                group_by.append(f)
-                params[dim.name + '_depth'] = depth
-            else:
-                cls = "%s_%s_closure" % (table, dim.name)
-                where.append(
-                    '%s.%s IN (SELECT child FROM %s WHERE parent = :%s)'\
-                        % (table, dim.name, cls, dim.name)
-                    )
 
-        select.extend('sum(%s)' % m.name for m in self.space._measures)
+        for dim, coord, depth in cube:
+            params[dim.name] = coord
+            joins.append(self.child_join(table, dim))
+            f = '%s_%s_closure.parent'% (table, dim.name)
+            select.append(f)
+            group_by.append(f)
+            params[dim.name + '_depth'] = depth
+
+        select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
         stm = 'SELECT %s FROM %s' % (', '.join(select), table)
 
         if joins:
