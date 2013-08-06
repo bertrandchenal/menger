@@ -21,7 +21,7 @@ import json
 import os
 from itertools import chain, izip
 
-from menger import build_space, backend
+from menger import build_space, backend, measure
 from menger.space import UserError
 
 class Cli(object):
@@ -44,27 +44,39 @@ class Cli(object):
         with self.connect():
             args = list(self.split_args())
 
+            # Pre-fill args without values
             for pos, (name, values) in enumerate(args):
                 if not values:
                     args[pos] =  (name, ('*',))
 
-            if not args:
-                args = [(m.name, None) for m in self.space._measures]
+            # Add measures if none is provided
+            with_msr = False
+            for name, _ in args:
+                if not hasattr(self.space, name):
+                    continue
+                if isinstance(getattr(self.space, name), measure.Measure):
+                    with_msr = True
+                    break
+            if not with_msr:
+                args.extend([(m.name, None) for m in self.space._measures])
 
+            # Query DB
             try:
                 results = self.space.dice(args)
             except UserError, e:
                 print 'Error:', e
                 return
 
+            # Output columns
             cols = list(n for n,_ in args)
             print '\t'.join(cols)
 
+            # Output Results
             for res in results:
                 for c in cols:
                     if isinstance(res[c], tuple):
                         res[c] = '/'.join(map(str, res[c]))
-                print '\t'.join(res[c] for c in cols)
+                print '\t'.join(str(res[c]) for c in cols)
 
     def do_drill(self):
         with self.connect():
