@@ -44,6 +44,16 @@ class SqliteBackend(SqlBackend):
             space_table, cols)
         self.cursor.execute(query)
 
+        # Create index covering all dimensions
+        self.cursor.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on %s (%s)' % (
+                space_table,
+                space_table,
+                ' ,'.join(d.name for d in space._dimensions)
+                )
+            )
+
+        # Create one index per dimension
         for d in space._dimensions:
             self.cursor.execute(
                 'CREATE INDEX IF NOT EXISTS %s_%s_index on %s (%s)' % (

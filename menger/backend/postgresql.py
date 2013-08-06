@@ -53,10 +53,22 @@ class PGBackend(SqlBackend):
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space_table, cols)
         self.cursor.execute(query)
 
+        # Read existing indexes
         self.cursor.execute(
             "SELECT indexname FROM pg_indexes WHERE tablename = %s",
             (space_table,))
         all_idx = [x[0] for x in self.cursor.fetchall()]
+
+        # Create index covering all dimensions
+        idx_name = '%s_dim_index' % space_table
+        if idx_name not in all_idx:
+            self.cursor.execute(
+            'CREATE UNIQUE INDEX %s on %s (%s)' % (
+                idx_name,
+                space_table,
+                ' ,'.join(d.name for d in space._dimensions)
+                )
+            )
 
         # Create one index per dimension
         for d in space._dimensions:

@@ -100,6 +100,8 @@ class Space:
         """
         Convert a list of points into a list of tuple (key, values)
         """
+        # TODO add a test that ensure that the same coord does not
+        # appear twice on the batch of points
         for point in points:
             values = tuple(point[m.name] for m in cls._measures)
             coords = tuple(d.key(tuple(point[d.name])) for d in cls._dimensions)
