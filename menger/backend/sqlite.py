@@ -14,7 +14,6 @@ class SqliteBackend(SqlBackend):
 
     def register(self, space):
         self.space = space
-
         self.cursor.execute('PRAGMA foreign_keys=1')
         space_table = space._name
         for dim in space._dimensions:
@@ -33,10 +32,6 @@ class SqliteBackend(SqlBackend):
                 'parent INTEGER  references %s (id), '
                 'child INTEGER  references %s (id), '
                 'depth INTEGER)' % (cls_table, dim_table, dim_table))
-
-            self.cursor.execute(
-                'CREATE INDEX IF NOT EXISTS %s_cls_index '
-                'ON %s (parent, child)' % (cls_table, cls_table))
 
         # Space (main) table
         cols = ', '.join(chain(
