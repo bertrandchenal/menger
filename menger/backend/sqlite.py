@@ -59,13 +59,13 @@ class SqliteBackend(SqlBackend):
 
         # get_stm
         select = ', '.join(measures)
-        dim_where = 'WHERE ' + ' AND '.join("%s = ?" % d for d in dimensions)
+        dim_where = 'WHERE ' + ' AND '.join('"%s" = ?' % d for d in dimensions)
         self.get_stm = 'SELECT %s FROM %s %s' % (
             select, space_table, dim_where)
 
         # update_stm
-        set_stm = ', '.join('%s = ?' % m for m in measures)
-        clause = ' and '.join('%s = ?' % d for d in dimensions)
+        set_stm = ', '.join('"%s" = ?' % m for m in measures)
+        clause = ' and '.join('"%s" = ?' % d for d in dimensions)
         self.update_stm = 'UPDATE %s SET %s WHERE %s' % (
             space_table, set_stm, clause)
 
