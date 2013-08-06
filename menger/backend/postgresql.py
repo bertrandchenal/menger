@@ -12,10 +12,6 @@ class PGBackend(SqlBackend):
         self.cursor = self.connection.cursor()
         super(PGBackend, self).__init__()
 
-    def close(self):
-        self.connection.commit()
-        self.connection.close()
-
     def register(self, space):
         self.space = space
         space_table = space._name
@@ -192,6 +188,10 @@ class PGBackend(SqlBackend):
 
     def insert(self, k, v):
         self.cursor.execute(self.insert_stm, k + v)
+
+    def close(self):
+        self.connection.commit()
+        self.connection.close()
 
     def get_columns_info(self, name):
         stm = "SELECT constraint_name " \

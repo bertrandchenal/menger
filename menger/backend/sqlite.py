@@ -12,12 +12,9 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute('PRAGMA journal_mode=WAL')
         super(SqlBackend, self).__init__()
 
-    def close(self):
-        self.connection.commit()
-        self.connection.close()
-
     def register(self, space):
         self.space = space
+
         self.cursor.execute('PRAGMA foreign_keys=1')
         space_table = space._name
         for dim in space._dimensions:
@@ -85,6 +82,10 @@ class SqliteBackend(SqlBackend):
         self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
+    def load(self, keys_vals):
+        res = super(SqliteBackend, self).load(keys_vals)
+        self.cursor.execute('ANALYZE')
+        return res
 
     def create_coordinate(self, dim, name, parent_id):
         table = "%s_%s" % (self.space._name, dim.name)
@@ -179,6 +180,10 @@ class SqliteBackend(SqlBackend):
 
     def insert(self, k, v):
         self.cursor.execute(self.insert_stm, k + v)
+
+    def close(self):
+        self.connection.commit()
+        self.connection.close()
 
     def get_columns_info(self, name):
         stm = 'PRAGMA foreign_key_list(%s)'
