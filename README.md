@@ -56,11 +56,11 @@ The `load` method allows to store data points (records):
         {'date': ['2012', '8', '9'], 'author': ['Bill'], 'nb_words': 523, 'nb_typos': 2},
         ])
 
-We can now retrieve aggregated measures with `fetch`:
+We can now retrieve aggregated measures with `dice`:
 
     :::python
-    Post.fetch() # gives {'nb_words': 705, 'nb_typos': 3}
-    Post.fetch(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
+    Post.dice() # gives {'nb_words': 705, 'nb_typos': 3}
+    Post.dice(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
 
 Or `drill` the dimensions (i.e. get subcategories of a dimension):
 
