@@ -99,7 +99,7 @@ class Cli(object):
 
         dim = getattr(self.space, name)
         for name in dim.drill(values):
-            print '/'.join(values + (name,))
+            print '/'.join(map(str, values) + [str(name)])
 
     def do_load(self):
         for path in self.action_args:
