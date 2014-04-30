@@ -21,32 +21,32 @@ class SqliteBackend(SqlBackend):
 
             # Dimension table
             self.cursor.execute(
-                'CREATE TABLE IF NOT EXISTS %s ( '
+                'CREATE TABLE IF NOT EXISTS "%s" ( '
                 'id INTEGER PRIMARY KEY, '
                 'name %s)' % (dim_table, dim.type))
 
             # Closure table for the dimension
             cls_table = dim_table + '_closure'
             self.cursor.execute(
-                'CREATE TABLE IF NOT EXISTS %s ('
-                'parent INTEGER  references %s (id), '
-                'child INTEGER  references %s (id), '
+                'CREATE TABLE IF NOT EXISTS "%s" ('
+                'parent INTEGER references "%s" (id), '
+                'child INTEGER references "%s" (id), '
                 'depth INTEGER)' % (cls_table, dim_table, dim_table))
 
         # Space (main) table
         cols = ', '.join(chain(
-            ('%s INTEGER references %s_%s (id) NOT NULL' % (
+            ('"%s" INTEGER references %s_%s (id) NOT NULL' % (
                 dim.name, space_table, dim.name
             ) for dim in space._dimensions),
             ('%s %s NOT NULL' % (msr.name, msr.type) for msr in space._measures)
         ))
-        query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (
+        query = 'CREATE TABLE IF NOT EXISTS "%s" (%s)' % (
             space_table, cols)
         self.cursor.execute(query)
 
         # Create index covering all dimensions
         self.cursor.execute(
-            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on %s (%s)' % (
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on "%s" (%s)' % (
                 space_table,
                 space_table,
                 ' ,'.join(d.name for d in space._dimensions)
@@ -56,7 +56,7 @@ class SqliteBackend(SqlBackend):
         # Create one index per dimension
         for d in space._dimensions:
             self.cursor.execute(
-                'CREATE INDEX IF NOT EXISTS %s_%s_index on %s (%s)' % (
+                'CREATE INDEX IF NOT EXISTS %s_%s_index on "%s" (%s)' % (
                     space_table,
                     d.name,
                     space_table,
@@ -70,13 +70,13 @@ class SqliteBackend(SqlBackend):
         # get_stm
         select = ', '.join(measures)
         dim_where = 'WHERE ' + ' AND '.join('"%s" = ?' % d for d in dimensions)
-        self.get_stm = 'SELECT %s FROM %s %s' % (
+        self.get_stm = 'SELECT %s FROM "%s" %s' % (
             select, space_table, dim_where)
 
         # update_stm
         set_stm = ', '.join('"%s" = ?' % m for m in measures)
         clause = ' and '.join('"%s" = ?' % d for d in dimensions)
-        self.update_stm = 'UPDATE %s SET %s WHERE %s' % (
+        self.update_stm = 'UPDATE "%s" SET %s WHERE %s' % (
             space_table, set_stm, clause)
 
         #insert_stm
@@ -84,7 +84,7 @@ class SqliteBackend(SqlBackend):
 
         val_stm = ', '.join('?' for f in fields)
         field_stm = ', '.join(fields)
-        self.insert_stm = 'INSERT INTO %s (%s) VALUES (%s)' % (
+        self.insert_stm = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
             space_table, field_stm, val_stm)
 
     def load(self, keys_vals):
@@ -103,7 +103,7 @@ class SqliteBackend(SqlBackend):
 
         # Fetch parent depth + 1 as last_id from the closure table ...
         self.cursor.execute(
-            'SELECT parent, ? as child, depth+1 FROM %s '
+            'SELECT parent, ? as child, depth+1 FROM "%s" '
             'WHERE child = ?' % closure, (last_id, parent_id))
 
         # ... and insert them
@@ -118,11 +118,11 @@ class SqliteBackend(SqlBackend):
         closure = table + '_closure'
 
         if parent_id is None:
-            stm = "SELECT name, id from %s where name is null" % table
+            stm = 'SELECT name, id from "%s" where name is null' % table
             args = tuple()
         else:
             stm = 'SELECT d.name, d.id ' \
-                'FROM %s AS c JOIN %s AS d ON (c.child = d.id) '\
+                'FROM "%s" AS c JOIN %s AS d ON (c.child = d.id) '\
                 'WHERE c.depth = ? AND c.parent = ?' % (closure, table)
             args = (depth, parent_id)
 
@@ -131,8 +131,8 @@ class SqliteBackend(SqlBackend):
     def get_parents(self, dim):
         dim_table = "%s_%s" % (self.space._name, dim.name)
         cls_table = dim_table + '_closure'
-        stm = "SELECT id, name, parent FROM %s"\
-            " JOIN %s ON (child = id) WHERE depth = 1"\
+        stm = 'SELECT id, name, parent FROM "%s"'\
+            ' JOIN %s ON (child = id) WHERE depth = 1'\
             %(dim_table, cls_table)
         self.cursor.execute(stm)
         return self.cursor.fetchall()
@@ -158,7 +158,7 @@ class SqliteBackend(SqlBackend):
             params[dim.name + '_depth'] = depth
 
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
-        stm = 'SELECT %s FROM %s' % (', '.join(select), table)
+        stm = 'SELECT %s FROM "%s"' % (', '.join(select), table)
 
         if joins:
             stm += ' ' + ' '.join(joins)
@@ -173,9 +173,9 @@ class SqliteBackend(SqlBackend):
     def child_join(self, spc, dim):
         cls = "%s_%s_closure" % (spc, dim.name)
         dim_table = "%s_%s" % (spc, dim.name)
-        join = "JOIN %s ON (%s.child = %s.%s" \
-            " AND %s.parent IN (SELECT child from %s WHERE parent = :%s" \
-            " AND depth = :%s))" \
+        join = 'JOIN %s ON (%s.child = "%s".%s' \
+            ' AND %s.parent IN (SELECT child from "%s" WHERE parent = :%s' \
+            ' AND depth = :%s))' \
             % (cls, cls, spc, dim.name, cls, cls, dim.name,
                dim.name + '_depth')
         return join
@@ -191,10 +191,10 @@ class SqliteBackend(SqlBackend):
         self.connection.close()
 
     def get_columns_info(self, name):
-        stm = 'PRAGMA foreign_key_list(%s)'
+        stm = 'PRAGMA foreign_key_list("%s")'
         fk = set(x[3] for x in self.cursor.execute(stm % name))
 
-        stm = 'PRAGMA table_info(%s)'
+        stm = 'PRAGMA table_info("%s")'
         self.cursor.execute(stm % name)
         for space_info in list(self.cursor):
             col_name = space_info[1]
