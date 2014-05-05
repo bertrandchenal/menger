@@ -7,9 +7,6 @@ class Dimension(object):
     def __init__(self, label, type='varchar'):
         self.label = label
         self.type = type
-        self.id_cache = {}
-        self.name_cache = {}
-        self.full_name_cache = {}
         self.db = None
         self.spc = None
         self.name = None
@@ -18,6 +15,9 @@ class Dimension(object):
     def set_db(self, db):
         self.db = db
         self.serialized = {}
+        self.id_cache = {}
+        self.name_cache = {}
+        self.full_name_cache = {}
 
 
 class Tree(Dimension):
