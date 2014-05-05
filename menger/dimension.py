@@ -4,13 +4,24 @@ from itertools import chain
 
 class Dimension(object):
 
-    def __init__(self, label, type='varchar'):
+    def __init__(self, label, type=str):
         self.label = label
         self.type = type
         self.db = None
         self.spc = None
         self.name = None
         self.maxdepth = None
+
+        if self.type == str:
+            self.sql_type = 'varchar'
+        elif self.type == int:
+            self.sql_type = 'integer'
+        elif self.type == float:
+            self.sql_type = 'float'
+        else:
+            raise Exception('Type %s not supported for dimension %s' % (
+                type, label
+            ))
 
     def set_db(self, db):
         self.db = db
@@ -94,15 +105,16 @@ class Tree(Dimension):
         if coord is None:
             return None, None
 
-        if '*' not in coord:
+        if None not in coord:
             key = self.key(coord, False)
             if key is None:
                 self.unknow_coord(coord)
             return key, 0
 
         for pos, val in enumerate(coord):
-            if val != '*':
+            if val is not None:
                 continue
+
             key = self.key(coord[:pos], False)
             if key is None:
                 self.unknow_coord(coord)

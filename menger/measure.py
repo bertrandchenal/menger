@@ -1,10 +1,21 @@
 
 class Measure(object):
 
-    def __init__(self, label, type='float'):
+    def __init__(self, label, type=float):
         self.type = type
         self.label = label
         self._db = None
+
+        if self.type == str:
+            self.sql_type = 'varchar'
+        elif self.type == int:
+            self.sql_type = 'integer'
+        elif self.type == float:
+            self.sql_type = 'float'
+        else:
+            raise Exception('Type %s not supported for dimension %s' % (
+                type, label
+            ))
 
     def set_db(self, db):
         self._db = db

@@ -18,6 +18,13 @@ class BaseBackend(object):
         attributes = {}
         # FIXME "dim_type" is not a good name
         for col_name, col_type, dim_type in columns:
+            if dim_type == 'integer':
+                dim_type = int
+            elif dim_type == 'float':
+                dim_type = float
+            elif dim_type == 'varchar':
+                dim_type = str
+
             if col_type == 'dimension':
                 attributes[col_name] = dimension.Tree(col_name, type=dim_type)
             elif col_type == 'measure':

@@ -43,32 +43,35 @@ class Cli(object):
     def do_dice(self):
         with self.connect():
             args = list(self.split_args())
+            measures = []
+            dimensions = {}
 
             # Pre-fill args without values
             for pos, (name, values) in enumerate(args):
-                if not values:
-                    args[pos] =  (name, ('*',))
-
-            # Add measures if none is provided
-            with_msr = False
-            for name, _ in args:
-                if not hasattr(self.space, name):
-                    continue
                 if isinstance(getattr(self.space, name), measure.Measure):
-                    with_msr = True
-                    break
-            if not with_msr:
-                args.extend([(m.name, None) for m in self.space._measures])
+                    measures.append(name)
+                    continue
+
+                if not values:
+                    values = (None,)
+                dimensions[name] = values
 
             # Query DB
             try:
-                results = self.space.dice(args)
+                results = self.space.dice(*measures, **dimensions)
             except UserError, e:
                 print 'Error:', e
                 return
 
-            # Output columns
+
+            # Prepare columns
             cols = list(n for n,_ in args)
+            # Dice will give results for all measures if none are
+            # given
+            if not measures:
+                cols.extend(m.name for m in self.space._measures)
+
+            # Print headers
             print '\t'.join(cols)
 
             # Output Results
@@ -125,12 +128,12 @@ class Cli(object):
                             self.space._name, name))
 
                 dim = getattr(self.space, name)
+                values = tuple(None if v == '*' else dim.type(v) \
+                               for v in values)
 
-                if dim.type == 'integer':
-                    values = tuple(v if v == '*' else int(v) for v in values)
             else:
                 name = arg
-                values = tuple()
+                values = None
             yield name, values
 
 def main():

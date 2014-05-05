@@ -40,11 +40,11 @@ def main(uri):
     # Load and Fetch
     with Item.connect(uri):
         Item.load([{'category': [], 'name': [], 'total': 1, 'amount': 1}])
-        assert next(Item.dice([('total', None)]))['total'] == 1
+        assert next(Item.dice('total'))['total'] == 1
 
     if uri != 'sqlite:///:memory:':
         with Item.connect(uri):
-            assert next(Item.dice([('total', None)]))['total'] == 1
+            assert next(Item.dice('total'))['total'] == 1
 
     # Drill
     with Item.connect(uri):
@@ -53,7 +53,7 @@ def main(uri):
         assert tuple(Item.category.drill(('A',))) == (('B'),)
         assert tuple(Item.category.drill(('A', 'B'))) == ('C', 'D')
         assert tuple(Item.category.drill(('A', 'B', 'C'))) == tuple()
-        assert next(Item.dice({'category': ('A',), 'total': None}))['total'] == 24
+        assert next(Item.dice('total', category=('A',)))['total'] == 24
 
 
     # Force cache invalidation
@@ -63,14 +63,14 @@ def main(uri):
 
     with Test.connect(uri):
         Test.load(items)
-        res = next(Test.dice([('total', None), ('count', None)]))
+        res = next(Test.dice('total', 'count'))
 
         assert res['total'] == 7 * nb_items
         assert res['count'] == 1 * nb_items
 
     with Test.connect(uri):
         for item in items:
-            Test.dice(item)
+            Test.dice('total', **item)
 
 if __name__ == '__main__':
     import time

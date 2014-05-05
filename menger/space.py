@@ -116,30 +116,39 @@ class Space:
         return cls._db.dice(key)
 
     @classmethod
-    def dice(cls, point=[]):
-        if isinstance(point, dict):
-            point = point.items()
+    def dice(cls, *measures, **dimensions):
 
         cube = []
         cube_dims = []
         cube_msrs = []
-        for name, value in point:
+        for name, value in dimensions.iteritems():
             if not hasattr(cls, name):
-                continue
+                raise Exception('%s is not a dimension of %s' % (
+                    name, cls._name))
             dim = getattr(cls, name)
-
-            if isinstance(dim, measure.Measure):
-                cube_msrs.append(dim)
-                continue
             if not isinstance(dim, dimension.Dimension):
-                continue
+                raise Exception('%s is not a dimension of %s' % (
+                    name, cls._name))
             cube_dims.append(dim)
             coord, depth = dim.explode(value)
             cube.append((dim, coord, depth))
 
+        for name in measures:
+            if not hasattr(cls, name):
+                raise Exception('%s is not a measure of %s' % (
+                    name, cls._name))
+            msr = getattr(cls, name)
+            if not isinstance(msr, measure.Measure):
+                raise Exception('%s is not a measure of %s' % (
+                    name, cls._name))
+            cube_msrs.append(msr)
+
+        if not cube_msrs:
+            cube_msrs = cls._measures
+
         cube_dims_len = len(cube_dims)
 
-        res = cls._db.dice(cube, cube_msrs)
+        res = cls._db.dice(cube_msrs, cube)
 
         for r in res:
             dict_res = {}
@@ -158,14 +167,14 @@ def build_space(data_point, name):
     attributes = {}
     for k, v in data_point.iteritems():
         if isinstance(v, list):
-            col_type = "integer"
+            col_type = int
             if isinstance(v[0], basestring):
-                col_type = 'varchar'
+                col_type = str
             attributes[k] = dimension.Tree(k, type=col_type)
         elif isinstance(v, float):
-            attributes[k] = measure.Sum(k, type='float')
+            attributes[k] = measure.Sum(k, type=float)
         elif isinstance(v, int):
-            attributes[k] = measure.Sum(k, type='integer')
+            attributes[k] = measure.Sum(k, type=int)
         else:
             raise Exception('Unknow type %s (on key %s)' % (type(v), k))
 

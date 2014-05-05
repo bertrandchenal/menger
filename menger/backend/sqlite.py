@@ -23,7 +23,7 @@ class SqliteBackend(SqlBackend):
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ( '
                 'id INTEGER PRIMARY KEY, '
-                'name %s)' % (dim_table, dim.type))
+                'name %s)' % (dim_table, dim.sql_type))
 
             # Closure table for the dimension
             cls_table = dim_table + '_closure'
@@ -38,7 +38,8 @@ class SqliteBackend(SqlBackend):
             ('"%s" INTEGER references %s_%s (id) NOT NULL' % (
                 dim.name, space_table, dim.name
             ) for dim in space._dimensions),
-            ('%s %s NOT NULL' % (msr.name, msr.type) for msr in space._measures)
+            ('"%s" %s NOT NULL' % (msr.name, msr.sql_type) \
+             for msr in space._measures)
         ))
         query = 'CREATE TABLE IF NOT EXISTS "%s" (%s)' % (
             space_table, cols)
@@ -141,7 +142,7 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(self.get_stm, key)
         return self.cursor.fetchone()
 
-    def dice(self, cube, msrs):
+    def dice(self, msrs, cube):
         table = self.space._name
         select = []
         joins = []

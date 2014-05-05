@@ -24,7 +24,7 @@ class PGBackend(SqlBackend):
             # Dimension table
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS %s (id SERIAL PRIMARY KEY,'
-                'name %s)' % (dim_table, dim.type))
+                'name %s)' % (dim_table, dim.sql_type))
 
             # Closure table for the dimension
             cls_table = dim_table + '_closure'
@@ -47,7 +47,7 @@ class PGBackend(SqlBackend):
             ('"%s" INTEGER NOT NULL references %s_%s (id)' % (
                 d.name, space_table, d.name
             ) for d in space._dimensions),
-            ('"%s" %s NOT NULL' % (m.name, m.type) for m in space._measures)
+            ('"%s" %s NOT NULL' % (m.name, m.sql_type) for m in space._measures)
         ))
 
         query = 'CREATE TABLE IF NOT EXISTS %s (%s)' % (space_table, cols)
@@ -154,7 +154,7 @@ class PGBackend(SqlBackend):
         self.cursor.execute(self.get_stm, key)
         return self.cursor.fetchone()
 
-    def dice(self, cube, msrs):
+    def dice(self, msrs, cube):
         table = self.space._name
         select = []
         joins = []
@@ -164,7 +164,6 @@ class PGBackend(SqlBackend):
 
         for dim, coord, depth in cube:
             params[dim.name] = coord
-
             joins.append(self.child_join(table, dim))
             f = '%s_%s_closure.parent'% (table, dim.name)
             select.append(f)
