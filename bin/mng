@@ -21,8 +21,8 @@ import json
 import os
 from itertools import chain, izip
 
-from menger import build_space, backend, measure
-from menger.space import UserError
+from menger import build_space, backend, measure, UserError, connect
+
 
 class Cli(object):
 
@@ -38,23 +38,23 @@ class Cli(object):
             self.space = bckd.build_space(self.name)
         else:
             self.space = build_space(data_point, self.name)
-        return self.space.connect(self.uri)
+        return connect(self.uri)
 
     def do_dice(self):
         with self.connect():
             args = list(self.split_args())
             measures = []
-            dimensions = {}
+            dimensions = []
 
             # Pre-fill args without values
-            for pos, (name, values) in enumerate(args):
+            for name, values in args:
                 if isinstance(getattr(self.space, name), measure.Measure):
                     measures.append(name)
                     continue
 
                 if not values:
                     values = (None,)
-                dimensions[name] = values
+                dimensions.append([name, values])
 
             # Query DB
             try:
@@ -62,7 +62,6 @@ class Cli(object):
             except UserError, e:
                 print 'Error:', e
                 return
-
 
             # Prepare columns
             cols = list(n for n,_ in args)

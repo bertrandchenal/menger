@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from copy import copy
 from itertools import product, izip, imap, chain
 from collections import namedtuple
@@ -8,11 +7,8 @@ import backend
 import dimension
 import measure
 
-SPACES = {}
+SPACES = []
 
-
-class UserError(Exception):
-    pass
 
 class MetaSpace(type):
 
@@ -20,7 +16,13 @@ class MetaSpace(type):
         if not '_name' in attrs:
             attrs['_name'] = name
 
+        if not '_label' in attrs:
+            attrs['_label'] = attrs['_name']
+
         attrs['_name'] = attrs['_name'].lower()
+
+        if not '_table' in attrs:
+            attrs['_table'] = attrs['_name'] + '_spc'
 
         for b in bases:
             if not type(b) == cls:
@@ -51,12 +53,9 @@ class MetaSpace(type):
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
-        for dim in dimensions:
-            dim._spc = spc
 
         if bases:
-            SPACES[attrs['_name']] = spc
-
+            SPACES.append(spc)
         return spc
 
 
@@ -64,21 +63,7 @@ class Space:
 
     __metaclass__ = MetaSpace
     _db = None
-    MAX_CACHE = 100000
-
-    @classmethod
-    @contextmanager
-    def connect(cls, uri):
-        cls._db = backend.get_backend(uri)
-        for dim in cls._dimensions:
-            dim.set_db(cls._db)
-
-        for msr in cls._measures:
-            msr.set_db(cls._db)
-
-        cls._db.register(cls)
-        yield
-        cls._db.close()
+    _all = []
 
     @classmethod
     def key(cls, point, create=False):
@@ -93,35 +78,31 @@ class Space:
 
     @classmethod
     def load(cls, points):
-        return cls._db.load(cls.convert(points))
+        return cls._db.load(cls, cls.convert(points))
 
     @classmethod
     def convert(cls, points):
         """
         Convert a list of points into a list of tuple (key, values)
         """
-        # TODO add a test that ensure that the same coord does not
-        # appear twice on the batch of points
         for point in points:
             values = tuple(point[m.name] for m in cls._measures)
             coords = tuple(d.key(tuple(point[d.name])) for d in cls._dimensions)
             yield coords, values
-
 
     @classmethod
     def get(cls, point):
         key = cls.key(point, False)
         if key is None:
             return tuple(0 for m in cls._measures)
-        return cls._db.dice(key)
+        return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, *measures, **dimensions):
-
+    def dice(cls, measures, dimensions):
         cube = []
         cube_dims = []
         cube_msrs = []
-        for name, value in dimensions.iteritems():
+        for name, value in dimensions:
             if not hasattr(cls, name):
                 raise Exception('%s is not a dimension of %s' % (
                     name, cls._name))
@@ -148,7 +129,7 @@ class Space:
 
         cube_dims_len = len(cube_dims)
 
-        res = cls._db.dice(cube_msrs, cube)
+        res = cls._db.dice(cls, cube_msrs, cube)
 
         for r in res:
             dict_res = {}
@@ -177,5 +158,4 @@ def build_space(data_point, name):
             attributes[k] = measure.Sum(k, type=int)
         else:
             raise Exception('Unknow type %s (on key %s)' % (type(v), k))
-
     return type(name, (Space,), attributes)

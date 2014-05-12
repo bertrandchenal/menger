@@ -4,16 +4,13 @@ from operator import add
 
 class BaseBackend(object):
 
-    def __init__(self):
-        self.space = None
-
     def build_space(self, name):
         from .. import space, dimension, measure
 
         columns = list(self.get_columns_info(name.lower()))
 
         if len(columns) == 0:
-            return None #FIXME better behaviour needed
+            raise Exception('Unable to build space, nothing found.')
 
         attributes = {}
         # FIXME "dim_type" is not a good name

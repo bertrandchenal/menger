@@ -4,13 +4,13 @@ from itertools import chain
 
 class Dimension(object):
 
-    def __init__(self, label, type=str):
+    def __init__(self, label, type=str, alias=None):
         self.label = label
         self.type = type
         self.db = None
-        self.spc = None
         self.name = None
-        self.maxdepth = None
+        self.depth = None
+        self.alias = alias
 
         if self.type == str:
             self.sql_type = 'varchar'
@@ -29,11 +29,21 @@ class Dimension(object):
         self.id_cache = {}
         self.name_cache = {}
         self.full_name_cache = {}
+        table = (self.alias or self.name).lower()
+        self.table = table + '_dim'
+        self.closure_table = table + '_closure'
 
 
 class Tree(Dimension):
 
+    def __init__(self, label, type=str, alias=None, depth=None):
+        super(Tree, self).__init__(label, type=type)
+        self.depth = depth
+
     def key(self, coord, create=True):
+        if self.depth and len(coord) > self.depth:
+            return None
+
         if coord in self.id_cache:
             return self.id_cache[coord]
 
@@ -121,6 +131,6 @@ class Tree(Dimension):
             return key, len(coord) - pos
 
     def unknow_coord(self, coord):
-        from . import space
-        raise space.UserError('"%s" on dimension "%s" is unknown' % (
-                '/'.join(map(str, coord)), self.name))
+        from . import UserError
+        raise UserError('"%s" on dimension "%s" is unknown' % (
+            '/'.join(map(str, coord)), self.name))
