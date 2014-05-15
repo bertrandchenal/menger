@@ -1,9 +1,9 @@
 from contextlib import contextmanager
 
-from space import Space, build_space, SPACES
+from .space import Space, build_space, SPACES
 import backend
-import dimension
-import measure
+from dimension import Dimension
+from measure import Measure
 
 
 class UserError(Exception):
