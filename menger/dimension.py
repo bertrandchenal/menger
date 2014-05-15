@@ -9,7 +9,6 @@ class Dimension(object):
         self.type = type
         self.db = None
         self.name = None
-        self.depth = None
         self.alias = alias
 
         if self.type == str:
@@ -36,12 +35,13 @@ class Dimension(object):
 
 class Tree(Dimension):
 
-    def __init__(self, label, type=str, alias=None, depth=None):
+    def __init__(self, label, levels, type=str, alias=None, ):
         super(Tree, self).__init__(label, type=type)
-        self.depth = depth
+        self.levels = levels
+        self.depth = len(self.levels)
 
     def key(self, coord, create=True):
-        if self.depth and len(coord) > self.depth:
+        if len(coord) > self.depth:
             return None
 
         if coord in self.id_cache:
