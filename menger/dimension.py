@@ -111,6 +111,15 @@ class Tree(Dimension):
         for name, cid in sorted(children):
             yield name
 
+    def glob(self, values):
+        if not values or values[-1] is not None:
+            yield values
+            return
+        values = values[:-1]
+        for res in self.glob(values):
+            for child in self.drill(res):
+                yield values + (child,)
+
     def explode(self, coord):
         if coord is None:
             return None, None
