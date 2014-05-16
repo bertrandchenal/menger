@@ -108,7 +108,7 @@ class Tree(Dimension):
         if key is None:
             return
         children = self.db.get_childs(self, key)
-        for name, cid in sorted(children):
+        for name, _ in sorted(children):
             yield name
 
     def glob(self, values):

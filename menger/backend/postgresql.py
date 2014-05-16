@@ -140,7 +140,7 @@ class PGBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def dice(self, space, msrs, cube):
+    def dice(self, space, cube, msrs):
         select = []
         joins = []
         where = []

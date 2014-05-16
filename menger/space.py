@@ -98,7 +98,7 @@ class Space:
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, measures, dimensions):
+    def dice(cls, dimensions, measures):
         cube = []
         cube_dims = []
         cube_msrs = []
@@ -127,17 +127,15 @@ class Space:
         if not cube_msrs:
             cube_msrs = cls._measures
 
-        cube_dims_len = len(cube_dims)
+        res = cls._db.dice(cls, cube, cube_msrs)
 
-        res = cls._db.dice(cls, cube_msrs, cube)
-
+        offset = len(cube_dims)
         for r in res:
-            dict_res = {}
-            for pos, d in enumerate(cube_dims):
-                dict_res[d.name] = d.get_name(r[pos])
-            for pos, m in enumerate(cube_msrs):
-                dict_res[m.name] = r[pos+cube_dims_len]
-            yield dict_res
+            line = tuple(chain(
+                (d.get_name(i) for i, d in izip(r, cube_dims)),
+                (r[offset+pos] for pos, m in enumerate(cube_msrs))
+             ))
+            yield line
 
 
 def build_space(data_point, name):
