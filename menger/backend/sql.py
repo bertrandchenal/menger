@@ -1,6 +1,6 @@
-from itertools import tee, izip
+from itertools import tee
 from operator import add
-from base import BaseBackend
+from .base import BaseBackend
 
 
 class SqlBackend(BaseBackend):

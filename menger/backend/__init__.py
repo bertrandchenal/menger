@@ -1,5 +1,5 @@
-from sql import SqlBackend
-from sqlite import SqliteBackend
+from .sql import SqlBackend
+from .sqlite import SqliteBackend
 
 try:
     import psycopg2
@@ -9,7 +9,7 @@ except:
 if psycopg2 is None:
     PGBackend = None
 else:
-    from postgresql import PGBackend
+    from .postgresql import PGBackend
 
 
 MAX_CACHE = 1000

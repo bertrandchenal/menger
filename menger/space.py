@@ -1,11 +1,11 @@
 from copy import copy
-from itertools import product, izip, imap, chain
+from itertools import product, chain
 from collections import namedtuple
 from json import dumps
 
-import backend
-import dimension
-import measure
+from . import backend
+from . import dimension
+from . import measure
 
 SPACES = []
 
@@ -37,7 +37,7 @@ class MetaSpace(type):
 
         dimensions = []
         measures = []
-        for k, v in attrs.iteritems():
+        for k, v in attrs.items():
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
                 dimensions.append(v)
@@ -59,9 +59,8 @@ class MetaSpace(type):
         return spc
 
 
-class Space:
+class Space(metaclass=MetaSpace):
 
-    __metaclass__ = MetaSpace
     _db = None
     _all = []
 
@@ -132,7 +131,7 @@ class Space:
         offset = len(cube_dims)
         for r in res:
             line = tuple(chain(
-                (d.get_name(i) for i, d in izip(r, cube_dims)),
+                (d.get_name(i) for i, d in zip(r, cube_dims)),
                 (r[offset+pos] for pos, m in enumerate(cube_msrs))
              ))
             yield line
@@ -144,10 +143,10 @@ def build_space(data_point, name):
     """
 
     attributes = {}
-    for k, v in data_point.iteritems():
+    for k, v in data_point.items():
         if isinstance(v, list):
             col_type = int
-            if isinstance(v[0], basestring):
+            if isinstance(v[0], str):
                 col_type = str
             attributes[k] = dimension.Tree(k, type=col_type)
         elif isinstance(v, float):

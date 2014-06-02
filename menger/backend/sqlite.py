@@ -1,7 +1,7 @@
 from itertools import chain, repeat
 import sqlite3
 
-from sql import SqlBackend
+from .sql import SqlBackend
 
 
 class SqliteBackend(SqlBackend):

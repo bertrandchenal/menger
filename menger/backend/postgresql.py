@@ -1,6 +1,6 @@
-from cStringIO import StringIO
-from itertools import chain, imap
-from sql import SqlBackend
+from io import StringIO
+from itertools import chain
+from .sql import SqlBackend
 import psycopg2
 
 

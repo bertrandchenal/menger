@@ -1,4 +1,4 @@
-from itertools import imap, izip, repeat
+from itertools import repeat
 from operator import add
 
 
