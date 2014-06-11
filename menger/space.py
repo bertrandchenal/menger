@@ -7,7 +7,7 @@ from . import backend
 from . import dimension
 from . import measure
 
-SPACES = []
+SPACES = {}
 
 
 class MetaSpace(type):
@@ -55,7 +55,7 @@ class MetaSpace(type):
 
 
         if bases:
-            SPACES.append(spc)
+            SPACES[attrs['_name']] = spc
         return spc
 
 
@@ -136,6 +136,11 @@ class Space(metaclass=MetaSpace):
              ))
             yield line
 
+def get_space(name):
+    return SPACES.get(name)
+
+def iter_spaces():
+    return SPACES.items()
 
 def build_space(data_point, name):
     """
