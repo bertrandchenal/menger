@@ -129,20 +129,29 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def dice(self, space, cube, msrs):
+    def dice(self, space, cube, msrs, filters=[]):
         select = []
         joins = []
-        where = []
         group_by = []
         params = {}
-
-        for dim, coord, depth in cube:
-            params[dim.name] = coord
+        for dim, key, depth in cube:
+            params[dim.name] = key
             joins.append(self.child_join(space, dim))
             f = '%s.parent'% (dim.closure_table)
             select.append(f)
             group_by.append(f)
             params[dim.name + '_depth'] = depth
+
+        where = []
+        for dim, key, height in filters:
+            cond = '%(dim)s in (SELECT child FROM %(closure)s '\
+                   'WHERE parent = %(key)s)' % {
+                       'dim': dim.name,
+                       'closure': dim.closure_table,
+                       'key': key,
+                       'depth': height,
+                   }
+            where.append(cond)
 
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
         stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
@@ -158,12 +167,19 @@ class SqliteBackend(SqlBackend):
         return self.cursor.fetchall()
 
     def child_join(self, spc, dim):
-        closure = dim.closure_table
-        join = 'JOIN %s ON (%s.child = "%s".%s'\
-               ' AND %s.parent IN (SELECT child from "%s" WHERE parent = :%s'\
-               ' AND depth = :%s))'\
-               % (closure, closure, spc._table, dim.name, closure, closure,
-                  dim.name, dim.name + '_depth')
+        subselect = 'SELECT child from "%(closure)s" WHERE (parent = :%(dim)s'\
+                    ' AND depth = :%(depth_key)s)' % {
+                        'closure': dim.closure_table,
+                        'dim': dim.name,
+                        'depth_key': dim.name + '_depth'
+                    }
+        join = 'JOIN %(closure)s ON (%(closure)s.child = "%(spc)s".%(dim)s'\
+               ' AND %(closure)s.parent IN (%(subselect)s))' % {
+                   'closure': dim.closure_table,
+                   'spc': spc._table,
+                   'dim': dim.name,
+                   'subselect': subselect,
+               }
         return join
 
     def close(self):

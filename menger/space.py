@@ -57,7 +57,6 @@ class MetaSpace(type):
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
-
         if bases:
             SPACES[attrs['_name']] = spc
         return spc
@@ -101,21 +100,24 @@ class Space(metaclass=MetaSpace):
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, dimensions, measures):
+    def dice(cls, dimensions, measures, filters={}):
         cube = []
         cube_dims = []
+        cube_filters = []
         cube_msrs = []
         for name, value in dimensions:
-            if not hasattr(cls, name):
-                raise Exception('%s is not a dimension of %s' % (
-                    name, cls._name))
-            dim = getattr(cls, name)
-            if not isinstance(dim, dimension.Dimension):
-                raise Exception('%s is not a dimension of %s' % (
-                    name, cls._name))
+            dim = cls.get_dimension(name)
             cube_dims.append(dim)
-            coord, depth = dim.explode(value)
-            cube.append((dim, coord, depth))
+            key, depth = dim.explode(value)
+            cube.append((dim, key, depth))
+
+        for name, value in filters.items():
+            dim = cls.get_dimension(name)
+            key = dim.key(value, False)
+            if key is None:
+                dim.unknow_coord(value)
+            height = dim.depth - len(value)
+            cube_filters.append((dim, key, height))
 
         for name in measures:
             if not hasattr(cls, name):
@@ -130,7 +132,7 @@ class Space(metaclass=MetaSpace):
         if not cube_msrs:
             cube_msrs = cls._measures
 
-        res = cls._db.dice(cls, cube, cube_msrs)
+        res = cls._db.dice(cls, cube, cube_msrs, cube_filters)
 
         offset = len(cube_dims)
         for r in res:
@@ -139,6 +141,17 @@ class Space(metaclass=MetaSpace):
                 (r[offset+pos] for pos, m in enumerate(cube_msrs))
              ))
             yield line
+
+    @classmethod
+    def get_dimension(cls, name):
+        msg = '%s is not a dimension of %s'
+        if not hasattr(cls, name):
+            raise Exception( msg % (name, cls._name))
+        dim = getattr(cls, name)
+        if not isinstance(dim, dimension.Dimension):
+            raise Exception(msg % (name, cls._name))
+        return dim
+
 
 def get_space(name):
     return SPACES.get(name)
