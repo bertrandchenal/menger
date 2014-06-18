@@ -119,7 +119,7 @@ class PGBackend(SqlBackend):
                             (last_id, last_id, 0))
         return last_id
 
-    def get_childs(self, dim, parent_id):
+    def get_children(self, dim, parent_id):
         if parent_id is None:
             stm = "SELECT name, id from %s where name is null" % dim.table
             args = tuple()

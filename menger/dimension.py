@@ -61,11 +61,11 @@ class Tree(Dimension):
 
         if coord:
             key = self.key(parent, False)
-            for name, cid in self.db.get_childs(self, key):
+            for name, cid in self.db.get_children(self, key):
                 name_tuple = parent + (name,)
                 self.id_cache[name_tuple] = cid
         else:
-            for name, cid in self.db.get_childs(self, None):
+            for name, cid in self.db.get_children(self, None):
                 self.id_cache[parent] = cid
 
         return self.id_cache.get(coord)
@@ -107,7 +107,7 @@ class Tree(Dimension):
         key = self.key(values, False)
         if key is None:
             return
-        children = self.db.get_childs(self, key)
+        children = self.db.get_children(self, key)
         for name, _ in sorted(children):
             yield name
 
