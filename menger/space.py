@@ -48,6 +48,10 @@ class MetaSpace(type):
                 measures.append(v)
                 v.name = k
 
+        key_fun = lambda x: x.name
+        dimensions.sort(key=key_fun)
+        measures.sort(key=key_fun)
+
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
 
