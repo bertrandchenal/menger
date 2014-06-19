@@ -112,13 +112,18 @@ class Tree(Dimension):
             yield name
 
     def glob(self, values):
-        if not values or values[-1] is not None:
+        if not values or not None in values:
             yield values
             return
-        values = values[:-1]
-        for res in self.glob(values):
-            for child in self.drill(res):
-                yield values + (child,)
+
+        for pos, val in enumerate(values):
+            if val is None:
+                break
+
+        tail = (None,) * (len(values) - pos - 1)
+        for child in self.drill(values[:pos]):
+            for res in self.glob(values[:pos] + (child,) + tail):
+                yield res
 
     def explode(self, coord):
         if coord is None:
