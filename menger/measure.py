@@ -20,6 +20,8 @@ class Measure(object):
     def set_db(self, db):
         self._db = db
 
+    def format(self, value, type=None):
+        return value
 
 class Sum(Measure):
 

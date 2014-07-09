@@ -144,6 +144,9 @@ class Tree(Dimension):
                 self.unknow_coord(coord)
             return key, len(coord) - pos
 
+    def format(self, value, type=None, offset=None):
+        return '/'.join(str(i) for i in value[offset:])
+
     def unknow_coord(self, coord):
         from . import UserError
         raise UserError('"%s" on dimension "%s" is unknown' % (

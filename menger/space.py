@@ -13,6 +13,8 @@ SPACES = {}
 class MetaSpace(type):
 
     def __new__(cls, name, bases, attrs):
+
+        # Define meta-data
         if not '_name' in attrs:
             attrs['_name'] = name
 
@@ -24,6 +26,7 @@ class MetaSpace(type):
         if not '_table' in attrs:
             attrs['_table'] = attrs['_name'] + '_spc'
 
+        # Inherits dimensions and measures
         for b in bases:
             if not type(b) == cls:
                 continue
@@ -44,9 +47,16 @@ class MetaSpace(type):
                 v.name = k
 
             # Collect measures
-            if isinstance(v, measure.Measure):
+            elif isinstance(v, measure.Measure):
                 measures.append(v)
                 v.name = k
+            else:
+                continue
+
+            # Plug custom format functions
+            format_fn = attrs.get('format_' + k)
+            if format_fn:
+                v.format = format_fn
 
         key_fun = lambda x: x.name
         dimensions.sort(key=key_fun)
