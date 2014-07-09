@@ -110,12 +110,12 @@ class Space(metaclass=MetaSpace):
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, dimensions, measures, filters={}):
+    def dice(cls, coordinates, measures, filters={}):
         cube = []
         cube_dims = []
         cube_filters = []
         cube_msrs = []
-        for name, value in dimensions:
+        for name, value in coordinates:
             dim = cls.get_dimension(name)
             cube_dims.append(dim)
             key, depth = dim.explode(value)
@@ -151,6 +151,7 @@ class Space(metaclass=MetaSpace):
                 (r[offset+pos] for pos, m in enumerate(cube_msrs))
              ))
             yield line
+
 
     @classmethod
     def get_dimension(cls, name):
