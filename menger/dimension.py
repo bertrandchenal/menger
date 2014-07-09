@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import chain
+from itertools import chain, islice
 
 
 class Dimension(object):
@@ -145,7 +145,7 @@ class Tree(Dimension):
             return key, len(coord) - pos
 
     def format(self, value, type=None, offset=None):
-        return '/'.join(str(i) for i in value[offset:])
+        return '/'.join(str(i) for i in islice(value, offset))
 
     def unknow_coord(self, coord):
         from . import UserError
