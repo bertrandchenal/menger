@@ -129,7 +129,7 @@ class Space(metaclass=MetaSpace):
                 if key is None:
                     # filters value is not known (warning ?)
                     continue
-                depth = dim.depth - len(value) - 1
+                depth = dim.depth - len(value)
                 key_depths.append((key, depth))
             if key_depths:
                 cube_filters.append((dim, key_depths))
