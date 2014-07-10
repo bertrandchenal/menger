@@ -143,15 +143,22 @@ class SqliteBackend(SqlBackend):
             params[dim.name + '_depth'] = depth
 
         where = []
-        for dim, key, height in filters:
-            cond = '%(dim)s in (SELECT child FROM %(closure)s '\
-                   'WHERE parent = %(key)s)' % {
+        for dim, key_depths in filters:
+            conds = []
+            for key, depth in key_depths:
+                key_cond = '(parent = %(key)s AND depth = %(depth)s)' % {
+                    'key': key,
+                    'depth': depth,
+                }
+                conds.append(key_cond)
+
+            subsel = '%(dim)s in (SELECT child FROM %(closure)s '\
+                   'WHERE %(cond)s )' % {
                        'dim': dim.name,
                        'closure': dim.closure_table,
-                       'key': key,
-                       'depth': height,
+                       'cond': ' OR '.join(conds)
                    }
-            where.append(cond)
+            where.append(subsel)
 
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
         stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)

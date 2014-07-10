@@ -121,13 +121,18 @@ class Space(metaclass=MetaSpace):
             key, depth = dim.explode(value)
             cube.append((dim, key, depth))
 
-        for name, value in filters.items():
+        for name, values in filters.items():
             dim = cls.get_dimension(name)
-            key = dim.key(value, False)
-            if key is None:
-                dim.unknow_coord(value)
-            height = dim.depth - len(value)
-            cube_filters.append((dim, key, height))
+            key_depths = []
+            for value in values:
+                key = dim.key(value, False)
+                if key is None:
+                    # filters value is not known (warning ?)
+                    continue
+                depth = dim.depth - len(value) - 1
+                key_depths.append((key, depth))
+            if key_depths:
+                cube_filters.append((dim, key_depths))
 
         for name in measures:
             if not hasattr(cls, name):
