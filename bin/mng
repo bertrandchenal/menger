@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python
 
 """
 Usage example:
@@ -15,11 +15,11 @@ Electronics/Computers  10.0
 Electronics/Camera & Photo      30.0
 """
 
-import ConfigParser
+import configparser
 import argparse
 import json
 import os
-from itertools import chain, izip
+from itertools import chain
 
 from menger import build_space, backend, measure, UserError, connect
 
@@ -58,9 +58,9 @@ class Cli(object):
 
             # Query DB
             try:
-                results = self.space.dice(*measures, **dimensions)
-            except UserError, e:
-                print 'Error:', e
+                results = self.space.dice(dimensions, measures)
+            except UserError as e:
+                print('Error:', e)
                 return
 
             # Prepare columns
@@ -71,14 +71,14 @@ class Cli(object):
                 cols.extend(m.name for m in self.space._measures)
 
             # Print headers
-            print '\t'.join(cols)
+            print('\t'.join(cols))
 
             # Output Results
-            for res in results:
-                for c in cols:
-                    if isinstance(res[c], tuple):
-                        res[c] = '/'.join(map(str, res[c]))
-                print '\t'.join(str(res[c]) for c in cols)
+            fmt = lambda x: '/'.join(map(str, x)) \
+                  if isinstance(x, tuple) else str(x)
+
+            for row in sorted(results):
+                print('\t'.join(fmt(c) for c in row))
 
     def do_drill(self):
         with self.connect():
@@ -87,12 +87,12 @@ class Cli(object):
 
     def do_info(self):
         with self.connect():
-            print 'Dimensions'
+            print('Dimensions')
             for dim in self.space._dimensions:
-                print ' ' + dim.name
-            print 'Measures'
+                print(' ' + dim.name)
+            print('Measures')
             for msr in self.space._measures:
-                print ' ' + msr.name
+                print(' ' + msr.name)
 
     def drill(self, name, values):
         if not hasattr(self.space, name):
@@ -101,14 +101,14 @@ class Cli(object):
 
         dim = getattr(self.space, name)
         for name in dim.drill(values):
-            print '/'.join(map(str, values) + [str(name)])
+            print('/'.join(map(str, values) + [str(name)]))
 
     def do_load(self):
         for path in self.action_args:
             fh = open(path)
             first = next(fh, "").strip()
             if not first:
-                print 'File %s ignored' % path
+                print('File %s ignored' % path)
                 continue
             first = json.loads(first)
 
@@ -145,7 +145,7 @@ def main():
 
     config_args = {}
     if os.path.exists('.mng'):
-        config = ConfigParser.ConfigParser()
+        config = configparser.ConfigParser()
         config.read('.mng')
         config_args.update(config.items('default'))
 
