@@ -186,11 +186,16 @@ def build_space(data_point, name):
             col_type = int
             if isinstance(v[0], str):
                 col_type = str
-            attributes[k] = dimension.Tree(k, type=col_type)
+            levels = ['Level-%s' % i for i,_ in enumerate(v)]
+            attributes[k] = dimension.Tree(k, levels, type=col_type)
+
         elif isinstance(v, float):
             attributes[k] = measure.Sum(k, type=float)
+
         elif isinstance(v, int):
             attributes[k] = measure.Sum(k, type=int)
+
         else:
             raise Exception('Unknow type %s (on key %s)' % (type(v), k))
+
     return type(name, (Space,), attributes)

@@ -194,6 +194,7 @@ class SqliteBackend(SqlBackend):
         self.connection.close()
 
     def get_columns_info(self, name):
+        name = name + '_spc'
         stm = 'PRAGMA foreign_key_list("%s")'
         fk = set(x[3] for x in self.cursor.execute(stm % name))
 
@@ -203,12 +204,16 @@ class SqliteBackend(SqlBackend):
             col_name = space_info[1]
             col_type = space_info[2].lower()
             if col_name in fk:
-                self.cursor.execute(stm % col_name + '_dim')
+                self.cursor.execute('SELECT max(depth) from %s' % (
+                    col_name + '_closure'))
+                depth, = next(self.cursor)
+
+                self.cursor.execute(stm % (col_name + '_dim'))
                 for dim_info in self.cursor:
                     dim_col = dim_info[1]
                     dim_type = dim_info[2].lower()
-                    if dim_col == 'name':
-                        yield col_name, 'dimension', dim_type
+                    if dim_col != 'name':
+                        yield col_name, 'dimension', dim_type, depth
                         break
             else:
-                yield col_name, 'measure', col_type
+                yield col_name, 'measure', col_type, None

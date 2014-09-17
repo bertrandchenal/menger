@@ -14,7 +14,7 @@ class BaseBackend(object):
 
         attributes = {}
         # FIXME "dim_type" is not a good name
-        for col_name, col_type, dim_type in columns:
+        for col_name, col_type, dim_type, depth in columns:
             if dim_type == 'integer':
                 dim_type = int
             elif dim_type == 'float':
@@ -23,9 +23,13 @@ class BaseBackend(object):
                 dim_type = str
 
             if col_type == 'dimension':
-                attributes[col_name] = dimension.Tree(col_name, type=dim_type)
+                levels = ['Level-%s' % i for i in range(depth)]
+                attributes[col_name] = dimension.Tree(
+                    col_name, levels, type=dim_type)
+
             elif col_type == 'measure':
                 attributes[col_name] = measure.Sum(col_name, type=dim_type)
+
             else:
                 raise Exception('Unknow type %s (on column %s)' % (
                     col_type, col_name))
