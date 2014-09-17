@@ -109,6 +109,45 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm, (last_id, last_id, 0))
         return last_id
 
+    def reparent(self, dim, child, new_parent):
+        """
+        Move child from his current parent to the new one.
+        """
+        cls = dim.closure_table
+        self.cursor.execute(
+            'SELECT parent, child FROM %s '
+            'WHERE child IN (SELECT child FROM %s where parent = ?) '
+            'AND parent NOT IN (SELECT child FROM %s WHERE parent = ?)' % (
+                cls, cls, cls
+            ),
+            (child, child)
+        )
+
+        # Detach child
+        self.cursor.execute(
+            'DELETE FROM %s '
+            'WHERE child IN (SELECT child FROM %s where parent = ?) '
+            'AND parent NOT IN (SELECT child FROM %s WHERE parent = ?)' % (
+                cls, cls, cls
+            ),
+            (child, child)
+        )
+
+        # Set new parent
+        self.cursor.execute(
+            'SELECT supertree.parent, subtree.child, '
+            'supertree.depth + subtree.depth + 1 '
+            'FROM %s AS supertree JOIN %s AS subtree '
+            'WHERE subtree.parent = ? '
+            'AND supertree.child = ?' % (cls, cls),
+            (child, new_parent)
+        )
+        values = list(self.cursor)
+        self.cursor.executemany(
+            'INSERT INTO %s (parent, child, depth) values (?, ?, ?)' % cls,
+            values
+        )
+
     def get_children(self, dim, parent_id, depth=1):
         if parent_id is None:
             stm = 'SELECT name, id from "%s" where name is null' % dim.table

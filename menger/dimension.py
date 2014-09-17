@@ -151,3 +151,9 @@ class Tree(Dimension):
         from . import UserError
         raise UserError('"%s" on dimension "%s" is unknown' % (
             '/'.join(map(str, coord)), self.name))
+
+    def reparent(self, coord, new_parent_coord):
+        record_id = self.key(coord, create=False)
+        curr_parent_id = self.key(coord[:-1], create=False)
+        new_parent_id = self.key(new_parent_coord, create=False)
+        self.db.reparent(self, record_id, new_parent_id)
