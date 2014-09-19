@@ -18,7 +18,7 @@ def connect(uri):
         for dim in cls._dimensions:
             dim.set_db(db)
 
-        for msr in cls._measures:
+        for msr in cls._db_measures:
             msr.set_db(db)
 
         db.register(cls)

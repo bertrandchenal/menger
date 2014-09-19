@@ -36,7 +36,7 @@ class SqliteBackend(SqlBackend):
                 dim.name,  dim.table
             ) for dim in space._dimensions),
             ('"%s" %s NOT NULL' % (msr.name, msr.sql_type) \
-             for msr in space._measures)
+             for msr in space._db_measures)
         ))
         query = 'CREATE TABLE IF NOT EXISTS "%s" (%s)' % (
             space._table, cols)
@@ -62,7 +62,7 @@ class SqliteBackend(SqlBackend):
                     )
                 )
 
-        measures = [m.name for m in space._measures]
+        measures = [m.name for m in space._db_measures]
         dimensions = [d.name for d in space._dimensions]
 
         # get_stm
@@ -114,15 +114,6 @@ class SqliteBackend(SqlBackend):
         Move child from his current parent to the new one.
         """
         cls = dim.closure_table
-        self.cursor.execute(
-            'SELECT parent, child FROM %s '
-            'WHERE child IN (SELECT child FROM %s where parent = ?) '
-            'AND parent NOT IN (SELECT child FROM %s WHERE parent = ?)' % (
-                cls, cls, cls
-            ),
-            (child, child)
-        )
-
         # Detach child
         self.cursor.execute(
             'DELETE FROM %s '

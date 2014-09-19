@@ -64,6 +64,9 @@ class MetaSpace(type):
 
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
+        attrs['_db_measures'] = [
+            m for m in measures if isinstance(m, measure.Sum)
+        ]
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
@@ -98,7 +101,7 @@ class Space(metaclass=MetaSpace):
         Convert a list of points into a list of tuple (key, values)
         """
         for point in points:
-            values = tuple(point[m.name] for m in cls._measures)
+            values = tuple(point[m.name] for m in cls._db_measures)
             coords = tuple(d.key(tuple(point[d.name])) for d in cls._dimensions)
             yield coords, values
 
@@ -144,19 +147,82 @@ class Space(metaclass=MetaSpace):
                     name, cls._name))
             cube_msrs.append(msr)
 
+        fn_msr = []
+        msr_idx = {}
+        xtr_msr = []
         if not cube_msrs:
-            cube_msrs = cls._measures
+            cube_msrs = cls._db_measures
+        else:
+            # Collect computed measure from the query
+            for pos, m in enumerate(cube_msrs):
+                if isinstance(m, measure.Computed):
+                    cube_msrs[pos] = None
+                    fn_msr.append((pos, m))
+            # Collapse resulting list
+            cube_msrs = list(filter(None, cube_msrs))
 
-        res = cls._db.dice(cls, cube, cube_msrs, cube_filters)
+        if fn_msr:
+            # Build msr_idx to acces future values by position
+            for pos, m in enumerate(cube_msrs):
+                msr_idx[m.name] = pos
 
-        offset = len(cube_dims)
-        for r in res:
-            line = tuple(chain(
-                (d.get_name(i) for i, d in zip(r, cube_dims)),
-                (r[offset+pos] for pos, m in enumerate(cube_msrs))
-             ))
-            yield line
+            # Add extra measure if needed
+            for _, m in fn_msr:
+                for arg in m.args:
+                    if arg not in msr_idx:
+                        new_msr = getattr(cls, arg)
+                        xtr_msr.append(new_msr)
+                        pos = len(xtr_msr) + len(cube_msrs) - 1
+                        msr_idx[arg] = pos
+            cube_msrs = cube_msrs + xtr_msr
 
+        rows = cls._db.dice(cls, cube, cube_msrs, cube_filters)
+        nb_dim = len(cube_dims)
+        nb_xtr = len(xtr_msr)
+
+        # Yield key, value tuples (allows building a dict)
+        for row in rows:
+            # Key is the combination of coordinates
+            key = tuple(d.get_name(i) for i, d in zip(row, cube_dims))
+            values = row[nb_dim:]
+
+            if not fn_msr:
+                yield key, values
+                continue
+
+            fn_vals = []
+            for pos, m in fn_msr:
+                # Build arguments and launch computation
+                args = [values[msr_idx[name]] for name in m.args]
+                val = m.compute(args)
+                fn_vals.append((pos, val))
+
+            if nb_xtr:
+                # Remove extra measure
+                values = values[:-nb_xtr]
+
+            values = tuple(cls.merge_computed_measures(values, fn_vals))
+            yield key, values
+
+    @staticmethod
+    def merge_computed_measures(values, fn_vals):
+        '''
+        Equivalent to:
+            for pos, v in fn_val:
+                values.insert(pos, v)
+            return values
+        '''
+        fn_vals = iter(fn_vals)
+        fpos, fval = next(fn_vals, (None, None))
+        for pos, val in enumerate(values):
+            if fpos is not None and pos == fpos:
+                yield fval
+                fpos, fval = next(fn_vals, (None, None))
+            yield val
+
+        while fpos is not None:
+            yield fval
+            fpos, fval = next(fn_vals, (None, None))
 
     @classmethod
     def get_dimension(cls, name):

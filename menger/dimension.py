@@ -153,7 +153,10 @@ class Tree(Dimension):
             '/'.join(map(str, coord)), self.name))
 
     def reparent(self, coord, new_parent_coord):
+        curr_parent = coord[:-1]
+        if curr_parent == new_parent_coord:
+            return
+
         record_id = self.key(coord, create=False)
-        curr_parent_id = self.key(coord[:-1], create=False)
         new_parent_id = self.key(new_parent_coord, create=False)
         self.db.reparent(self, record_id, new_parent_id)
