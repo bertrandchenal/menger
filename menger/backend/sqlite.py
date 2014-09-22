@@ -139,6 +139,11 @@ class SqliteBackend(SqlBackend):
             values
         )
 
+    def rename(self, dim, record_id, new_name):
+        self.cursor.execute('UPDATE %s SET name = ? WHERE id = ?' % dim.table,
+                            (new_name, record_id)
+        )
+
     def get_children(self, dim, parent_id, depth=1):
         if parent_id is None:
             stm = 'SELECT name, id from "%s" where name is null' % dim.table

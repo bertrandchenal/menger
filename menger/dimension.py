@@ -21,16 +21,20 @@ class Dimension(object):
             raise Exception('Type %s not supported for dimension %s' % (
                 type, label
             ))
+        self.init_cache()
 
     def set_db(self, db):
         self.db = db
+        table = (self.alias or self.name).lower()
+        self.table = table + '_dim'
+        self.closure_table = table + '_closure'
+        self.init_cache()
+
+    def init_cache(self):
         self.serialized = {}
         self.id_cache = {}
         self.name_cache = {}
         self.full_name_cache = {}
-        table = (self.alias or self.name).lower()
-        self.table = table + '_dim'
-        self.closure_table = table + '_closure'
 
 
 class Tree(Dimension):
@@ -160,3 +164,12 @@ class Tree(Dimension):
         record_id = self.key(coord, create=False)
         new_parent_id = self.key(new_parent_coord, create=False)
         self.db.reparent(self, record_id, new_parent_id)
+
+        # Reset cache
+        self.init_cache()
+
+    def rename(self, coord, new_name):
+        record_id = self.key(coord, create=False)
+        self.db.rename(self, record_id, new_name)
+        # Reset cache
+        self.init_cache()
