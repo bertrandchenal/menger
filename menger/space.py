@@ -113,7 +113,7 @@ class Space(metaclass=MetaSpace):
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, coordinates, measures, filters={}):
+    def dice(cls, coordinates=[], measures=[], filters={}):
         cube = []
         cube_dims = []
         cube_filters = []

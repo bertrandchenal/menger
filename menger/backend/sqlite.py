@@ -224,8 +224,11 @@ class SqliteBackend(SqlBackend):
                }
         return join
 
-    def close(self):
-        self.connection.commit()
+    def close(self, rollback=False):
+        if rollback:
+            self.connection.rollback()
+        else:
+            self.connection.commit()
         self.connection.close()
 
     def get_columns_info(self, name):

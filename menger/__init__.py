@@ -11,7 +11,7 @@ class UserError(Exception):
 
 
 @contextmanager
-def connect(uri):
+def connect(uri, rollback_on_close=False):
     db = backend.get_backend(uri)
     for name, cls in SPACES.items():
         cls._db = db
@@ -23,5 +23,5 @@ def connect(uri):
 
         db.register(cls)
     yield
-    db.close()
+    db.close(rollback=rollback_on_close)
 
