@@ -1,6 +1,6 @@
 from copy import copy
 from itertools import product, chain
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from json import dumps
 
 from . import backend
@@ -12,6 +12,11 @@ SPACE_LIST = []
 
 
 class MetaSpace(type):
+
+    # The prepare function
+    @classmethod
+    def __prepare__(metacls, name, bases): # No keywords in this case
+       return OrderedDict()
 
     def __new__(cls, name, bases, attrs):
 
@@ -58,10 +63,6 @@ class MetaSpace(type):
             format_fn = attrs.get('format_' + k)
             if format_fn:
                 v.format = format_fn
-
-        key_fun = lambda x: x.name
-        dimensions.sort(key=key_fun)
-        measures.sort(key=key_fun)
 
         attrs['_dimensions'] = dimensions
         attrs['_measures'] = measures
