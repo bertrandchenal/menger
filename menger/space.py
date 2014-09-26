@@ -8,6 +8,7 @@ from . import dimension
 from . import measure
 
 SPACES = {}
+SPACE_LIST = []
 
 
 class MetaSpace(type):
@@ -71,6 +72,7 @@ class MetaSpace(type):
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
         if bases:
+            SPACE_LIST.append(spc)
             SPACES[attrs['_name']] = spc
         return spc
 
@@ -239,7 +241,7 @@ def get_space(name):
     return SPACES.get(name)
 
 def iter_spaces():
-    return SPACES.items()
+    return SPACE_LIST
 
 def build_space(data_point, name):
     """
