@@ -157,12 +157,17 @@ class Tree(Dimension):
             '/'.join(map(str, coord)), self.name))
 
     def reparent(self, coord, new_parent_coord):
+        from . import UserError
         curr_parent = coord[:-1]
         if curr_parent == new_parent_coord:
             return
 
         record_id = self.key(coord, create=False)
         new_parent_id = self.key(new_parent_coord, create=False)
+        if record_id is None:
+            raise UserError("Child coordinate not found")
+        if new_parent_id is None:
+            raise UserError("Parent coordinate not found")
         self.db.reparent(self, record_id, new_parent_id)
 
         # Reset cache
