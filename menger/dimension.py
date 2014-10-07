@@ -60,6 +60,13 @@ class Tree(Dimension):
 
         return self.create_id(coord)
 
+    def contains(self, coord):
+        return self.key(coord, create=False) is not None
+
+    def delete(self, coord):
+        coord_id = self.key(coord)
+        self.db.delete_coordinate(self, coord_id)
+
     def get_id(self, coord):
         parent = coord[:-1]
 

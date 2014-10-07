@@ -25,14 +25,14 @@ class SqliteBackend(SqlBackend):
             # Closure table for the dimension
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ('
-                'parent INTEGER references "%s" (id), '
-                'child INTEGER references "%s" (id), '
+                'parent INTEGER REFERENCES "%s" (id) ON DELETE CASCADE, '
+                'child INTEGER REFERENCES "%s" (id) ON DELETE CASCADE, '
                 'depth INTEGER)' % (dim.closure_table, dim.table,
                                     dim.table))
 
         # Space (main) table
         cols = ', '.join(chain(
-            ('"%s" INTEGER references %s (id) NOT NULL' % (
+            ('"%s" INTEGER REFERENCES %s (id) ON DELETE CASCADE NOT NULL ' % (
                 dim.name,  dim.table
             ) for dim in space._dimensions),
             ('"%s" %s NOT NULL' % (msr.name, msr.sql_type) \
@@ -108,6 +108,10 @@ class SqliteBackend(SqlBackend):
         self.cursor.executemany(stm, self.cursor.fetchall())
         self.cursor.execute(stm, (last_id, last_id, 0))
         return last_id
+
+    def delete_coordinate(self, dim, coord_id):
+        self.cursor.execute(
+            'DELETE FROM %s WHERE id = ?' % dim.table, (coord_id,))
 
     def reparent(self, dim, child, new_parent):
         """
