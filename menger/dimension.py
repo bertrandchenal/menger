@@ -170,7 +170,7 @@ class Tree(Dimension):
             return
 
         record_id = self.key(coord, create=False)
-        new_parent_id = self.key(new_parent_coord, create=False)
+        new_parent_id = self.key(new_parent_coord)
         if record_id is None:
             raise UserError("Child coordinate not found")
         if new_parent_id is None:
