@@ -169,12 +169,8 @@ class Tree(Dimension):
         if curr_parent == new_parent_coord:
             return
 
-        record_id = self.key(coord, create=False)
+        record_id = self.key(coord)
         new_parent_id = self.key(new_parent_coord)
-        if record_id is None:
-            raise UserError("Child coordinate not found")
-        if new_parent_id is None:
-            raise UserError("Parent coordinate not found")
         self.db.reparent(self, record_id, new_parent_id)
 
         # Reset cache
