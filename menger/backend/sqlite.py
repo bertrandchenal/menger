@@ -30,6 +30,11 @@ class SqliteBackend(SqlBackend):
                 'depth INTEGER)' % (dim.closure_table, dim.table,
                                     dim.table))
 
+            self.cursor.execute(
+                'CREATE INDEX IF NOT EXISTS %s_idx '
+                'ON %s (parent, depth)' % (dim.closure_table, dim.closure_table)
+            )
+
         # Space (main) table
         cols = ', '.join(chain(
             ('"%s" INTEGER REFERENCES %s (id) ON DELETE CASCADE NOT NULL ' % (
