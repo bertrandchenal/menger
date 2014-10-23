@@ -92,9 +92,9 @@ class SqliteBackend(SqlBackend):
 
     def load(self, space, keys_vals):
         # TODO check for equivalent in postgresql
-        res = super(SqliteBackend, self).load(space, keys_vals)
+        nb_edit = super(SqliteBackend, self).load(space, keys_vals)
         self.cursor.execute('ANALYZE')
-        return res
+        return nb_edit
 
     def create_coordinate(self, dim, name, parent_id):
         # Fill dimension table
