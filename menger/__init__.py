@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from .space import Space, build_space, SPACES, get_space, iter_spaces
+from .space import Space, build_space, SPACES, get_space, iter_spaces, register
 from . import backend
 from .dimension import Dimension
 from .measure import Measure

@@ -1,6 +1,6 @@
 from copy import copy
 from itertools import product, chain
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict, defaultdict
 from json import dumps
 
 from . import backend
@@ -9,6 +9,16 @@ from . import measure
 
 SPACES = {}
 SPACE_LIST = []
+
+EVENTS = defaultdict(list)
+
+def register(event_name, callback):
+    if callback not in EVENTS[event_name]:
+        EVENTS[event_name].append(callback)
+
+def trigger(event_name):
+    for callback in EVENTS[event_name]:
+        callback()
 
 
 class MetaSpace(type):
@@ -96,7 +106,9 @@ class Space(metaclass=MetaSpace):
 
     @classmethod
     def load(cls, points):
-        return cls._db.load(cls, cls.convert(points))
+        nb_edit = cls._db.load(cls, cls.convert(points))
+        trigger('load')
+        return nb_edit
 
     @classmethod
     def convert(cls, points):
