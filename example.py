@@ -1,19 +1,19 @@
 import os
 from random import sample
-from string import letters
+from string import ascii_letters
 
-from menger import measure, dimension, Space
+from menger import measure, dimension, Space, connect
 
 class Item(Space):
-    category = dimension.Tree('Category')
+    category = dimension.Tree('Category', levels=['One', 'Two', 'Three'])
     total = measure.Sum('Total')
 
 class NonSpace(object):
-    ignore_me = dimension.Tree('Ignore Me')
+    ignore_me = dimension.Tree('Ignore Me', levels=[])
 
 
 class Test(NonSpace, Item):
-    name = dimension.Tree('Name')
+    name = dimension.Tree('Name', levels=['Name'])
     count = measure.Sum('Count')
 
 
@@ -28,8 +28,8 @@ item_data = [
     ]
 
 def test_data(nb):
-    for i in xrange(nb):
-        name = ''.join(sample(letters, 5))
+    for i in range(nb):
+        name = ''.join(sample(ascii_letters, 5))
         yield {'category': ['A', 'B', 'C'],
                'name': [name],
                'count': 1,
@@ -38,39 +38,40 @@ def test_data(nb):
 
 def main(uri):
     # Load and Fetch
-    with Item.connect(uri):
+    with connect(uri):
         Item.load([{'category': [], 'name': [], 'total': 1, 'amount': 1}])
-        assert next(Item.dice('total'))['total'] == 1
+        assert next(Item.dice([], ['total'])) == ((), (1.0,))
 
     if uri != 'sqlite:///:memory:':
-        with Item.connect(uri):
-            assert next(Item.dice('total'))['total'] == 1
+        with connect(uri):
+            assert next(Item.dice([], ['total'])) == ((), (1.0,))
 
     # Drill
-    with Item.connect(uri):
+    with connect(uri):
         Item.load(item_data*50)
 
         assert tuple(Item.category.drill(('A',))) == (('B'),)
         assert tuple(Item.category.drill(('A', 'B'))) == ('C', 'D')
         assert tuple(Item.category.drill(('A', 'B', 'C'))) == tuple()
-        assert next(Item.dice('total', category=('A',)))['total'] == 24
+        cube = [('category', ('A',))]
+        assert next(Item.dice(cube, ['total'])) == ((('A',),), (24.0,))
 
 
     # Force cache invalidation
-    Test.MAX_CACHE = 100
     nb_items = 1000
     items = list(test_data(nb_items))
 
-    with Test.connect(uri):
+    with connect(uri):
         Test.load(items)
-        res = next(Test.dice('total', 'count'))
+        res = next(Test.dice([], ['total', 'count']))
+        _, (total, count) = res
 
-        assert res['total'] == 7 * nb_items
-        assert res['count'] == 1 * nb_items
+        assert total == 7 * nb_items
+        assert count == 1 * nb_items
 
-    with Test.connect(uri):
+    with connect(uri):
         for item in items:
-            Test.dice('total', **item)
+            Test.dice(item.items(), ['total'])
 
 if __name__ == '__main__':
     import time
@@ -86,9 +87,9 @@ if __name__ == '__main__':
         )
 
     for uri in uris:
-        print 'Test with %s' % uri
+        print('Test with %s' % uri)
         t = time.time()
         c = time.clock()
         main(uri)
-        print ' done in %.3s sec (%.3f CPU sec)' % (
-            time.time() - t, (time.clock() - c))
+        print(' done in %.3s sec (%.3f CPU sec)' % (
+            time.time() - t, (time.clock() - c)))

@@ -12,9 +12,6 @@ else:
     from .postgresql import PGBackend
 
 
-MAX_CACHE = 1000
-
-
 def get_backend(uri):
     """
     uri string examples:
