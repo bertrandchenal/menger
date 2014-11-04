@@ -4,7 +4,7 @@ class Measure(object):
     def __init__(self, label):
         self.label = label
 
-    def format(self, value, type=None):
+    def format(self, value, fmt_type=None):
         return value
 
 

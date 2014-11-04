@@ -178,13 +178,14 @@ class SqliteBackend(SqlBackend):
         joins = []
         group_by = []
         params = {}
-        for dim, key, depth in cube:
-            params[dim.name] = key
-            joins.append(self.child_join(space, dim))
-            f = '%s.parent'% (dim.closure_table)
+        for pos, (dim, key, depth) in enumerate(cube):
+            alias = 'join_%s' % pos
+            joins.append(self.child_join(space, dim, alias))
+            f = '%s.parent'% alias
             select.append(f)
             group_by.append(f)
-            params[dim.name + '_depth'] = depth
+            params[alias + '_key'] = key
+            params[alias + '_depth'] = depth
 
         where = []
         for dim, key_depths in filters:
@@ -217,20 +218,23 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm, params)
         return self.cursor.fetchall()
 
-    def child_join(self, spc, dim):
-        subselect = 'SELECT child from "%(closure)s" WHERE (parent = :%(dim)s'\
-                    ' AND depth = :%(depth_key)s)' % {
+    def child_join(self, spc, dim, alias):
+        subselect = 'SELECT child from "%(closure)s" ' \
+                    ' WHERE (parent = :%(alias)s_key' \
+                    ' AND depth = :%(alias)s_depth)' % {
                         'closure': dim.closure_table,
-                        'dim': dim.name,
-                        'depth_key': dim.name + '_depth'
+                        'alias': alias,
                     }
-        join = 'JOIN %(closure)s ON (%(closure)s.child = "%(spc)s".%(dim)s'\
-               ' AND %(closure)s.parent IN (%(subselect)s))' % {
+        join = 'JOIN %(closure)s AS %(alias)s ' \
+               'ON (%(alias)s.child = "%(spc)s".%(dim)s ' \
+               'AND %(alias)s.parent IN (%(subselect)s))' % {
                    'closure': dim.closure_table,
                    'spc': spc._table,
                    'dim': dim.name,
                    'subselect': subselect,
+                   'alias': alias,
                }
+
         return join
 
     def close(self, rollback=False):
