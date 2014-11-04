@@ -155,7 +155,7 @@ class Tree(Dimension):
                 self.unknow_coord(coord)
             return key, len(coord) - pos
 
-    def format(self, value, type=None, offset=None):
+    def format(self, value, fmt_type=None, offset=None):
         return '/'.join(str(i) for i in islice(value, offset, None))
 
     def unknow_coord(self, coord):
