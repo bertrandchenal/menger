@@ -122,19 +122,27 @@ class Tree(Dimension):
         for name, _ in sorted(children):
             yield name
 
-    def glob(self, values):
-        if not values or not None in values:
-            yield values
+    def glob(self, value):
+        if not value:
+            # empty tuple
+            yield value
             return
 
-        for pos, val in enumerate(values):
-            if val is None:
-                break
+        for res in self._glob([value]):
+            yield res
 
-        tail = (None,) * (len(values) - pos - 1)
-        for child in self.drill(values[:pos]):
-            for res in self.glob(values[:pos] + (child,) + tail):
-                yield res
+    def _glob(self, values):
+        for value in values:
+            for pos, val in enumerate(value):
+                if val is None:
+                    for child in self.drill(value[:pos]):
+                        child_glob = value[:pos] + (child,) + value[pos+1:]
+                        for res in self._glob([child_glob]):
+                            yield res
+                    break
+            else:
+                # No None found
+                yield value
 
     def explode(self, coord):
         if coord is None:
