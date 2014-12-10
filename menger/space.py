@@ -117,12 +117,15 @@ class Space(metaclass=MetaSpace):
         """
         for point in points:
             values = tuple(point[m.name] for m in cls._db_measures)
-            coords = tuple(d.key(tuple(point[d.name])) for d in cls._dimensions)
+            coords = tuple(
+                d.key(tuple(point[d.name]), create=True) \
+                for d in cls._dimensions
+            )
             yield coords, values
 
     @classmethod
     def get(cls, point):
-        key = cls.key(point, False)
+        key = cls.key(point)
         if key is None:
             return tuple(0 for m in cls._measures)
         return cls._db.dice(key) # FIXME signature looks wrong
@@ -143,7 +146,7 @@ class Space(metaclass=MetaSpace):
             dim = cls.get_dimension(name)
             key_depths = []
             for value in values:
-                key = dim.key(value, False)
+                key = dim.key(value)
                 if key is None:
                     # filters value is not known (warning ?)
                     continue

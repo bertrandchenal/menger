@@ -44,7 +44,7 @@ class Tree(Dimension):
         self.levels = levels
         self.depth = len(self.levels)
 
-    def key(self, coord, create=True):
+    def key(self, coord, create=False):
         if len(coord) > self.depth:
             return None
 
@@ -61,17 +61,19 @@ class Tree(Dimension):
         return self.create_id(coord)
 
     def contains(self, coord):
-        return self.key(coord, create=False) is not None
+        return self.key(coord) is not None
 
     def delete(self, coord):
         coord_id = self.key(coord)
+        if not coord_id:
+            return
         self.db.delete_coordinate(self, coord_id)
 
     def get_id(self, coord):
         parent = coord[:-1]
 
         if coord:
-            key = self.key(parent, False)
+            key = self.key(parent)
             for name, cid in self.db.get_children(self, key):
                 name_tuple = parent + (name,)
                 self.id_cache[name_tuple] = cid
@@ -106,7 +108,7 @@ class Tree(Dimension):
         if not coord:
             parent = name = None
         else:
-            parent = self.key(coord[:-1])
+            parent = self.key(coord[:-1], create=True)
             name = coord[-1]
 
         new_id = self.db.create_coordinate(self, name, parent)
@@ -115,7 +117,7 @@ class Tree(Dimension):
         return new_id
 
     def drill(self, values):
-        key = self.key(values, False)
+        key = self.key(values)
         if key is None:
             return
         children = self.db.get_children(self, key)
@@ -149,7 +151,7 @@ class Tree(Dimension):
             return None, None
 
         if None not in coord:
-            key = self.key(coord, False)
+            key = self.key(coord)
             if key is None:
                 self.unknow_coord(coord)
             return key, 0
@@ -158,7 +160,7 @@ class Tree(Dimension):
             if val is not None:
                 continue
 
-            key = self.key(coord[:pos], False)
+            key = self.key(coord[:pos])
             if key is None:
                 self.unknow_coord(coord)
             return key, len(coord) - pos
@@ -185,7 +187,7 @@ class Tree(Dimension):
         self.init_cache()
 
     def rename(self, coord, new_name):
-        record_id = self.key(coord, create=False)
+        record_id = self.key(coord)
         self.db.rename(self, record_id, new_name)
         # Reset cache
         self.init_cache()
