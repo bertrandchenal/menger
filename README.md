@@ -92,3 +92,20 @@ Full code listing:
         print Post.dice(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
 
         print list(Post.date.drill('2012'))
+
+
+Roadmap:
+
+ - Think about passing format function as a param to the dimension
+   constructor (instead of adding them on the class)
+ - Change `dice` api to not accept coord like `('Fixed parent', None ,
+   None)` but use something like `(dim, parent_key, depth)` (and so
+   bypass the cube building step). Or even something more advanced like:
+
+       `(dim, (('drill', parent_key, depth), ('ilike', 'Pattern*')))`
+
+   and get rid of the `filters` argument on the `dice` method.
+ - Implement garbage collection on dimensions: Delete any record in a
+   dimension table (and the associate closure) for which there are no
+   data in the main table.
+ - Rename s/Space/Cube/g
