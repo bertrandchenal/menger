@@ -123,6 +123,7 @@ class SqliteBackend(SqlBackend):
         Move child from his current parent to the new one.
         """
         cls = dim.closure_table
+
         # Detach child
         self.cursor.execute(
             'DELETE FROM %s '
@@ -173,7 +174,7 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def dice(self, space, cube, msrs, filters=[]):
+    def dice_query(self, space, cube, msrs, filters=[]):
         select = []
         joins = []
         group_by = []
@@ -215,6 +216,11 @@ class SqliteBackend(SqlBackend):
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
 
+
+        return stm, params
+
+    def dice(self, space, cube, msrs, filters=[]):
+        stm , params = self.dice_query(space, cube, msrs, filters)
         self.cursor.execute(stm, params)
         return self.cursor.fetchall()
 
@@ -236,6 +242,18 @@ class SqliteBackend(SqlBackend):
                }
 
         return join
+
+    def snapshot(self, space, other_space, cube, msrs, filters=[]):
+        query = 'DELETE FROM %s' % other_space._table
+        self.cursor.execute(query)
+        rows = self.dice(space, cube, msrs, filters)
+
+        dice_stm , dice_params = self.dice_query(space, cube, msrs, filters)
+
+        stm = 'INSERT INTO %s ' % other_space._table
+        stm = stm + dice_stm
+
+        self.cursor.execute(stm, dice_params)
 
     def close(self, rollback=False):
         if rollback:

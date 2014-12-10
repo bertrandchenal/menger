@@ -131,16 +131,16 @@ class Space(metaclass=MetaSpace):
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def dice(cls, coordinates=[], measures=[], filters={}):
-        cube = []
-        cube_dims = []
-        cube_filters = []
-        cube_msrs = []
+    def build_cube(cls, coordinates=[], measures=[], filters={}):
+        cube = {
+            'dimensions': [],
+            'measures': [],
+            'filters': [],
+        }
         for name, value in coordinates:
             dim = cls.get_dimension(name)
-            cube_dims.append(dim)
             key, depth = dim.explode(value)
-            cube.append((dim, key, depth))
+            cube['dimensions'].append((dim, key, depth))
 
         for name, values in filters.items():
             dim = cls.get_dimension(name)
@@ -153,7 +153,7 @@ class Space(metaclass=MetaSpace):
                 depth = dim.depth - len(value)
                 key_depths.append((key, depth))
             if key_depths:
-                cube_filters.append((dim, key_depths))
+                cube['filters'].append((dim, key_depths))
 
         for name in measures:
             if not hasattr(cls, name):
@@ -163,25 +163,31 @@ class Space(metaclass=MetaSpace):
             if not isinstance(msr, measure.Measure):
                 raise Exception('%s is not a measure of %s' % (
                     name, cls._name))
-            cube_msrs.append(msr)
+            cube['measures'].append(msr)
+
+        if not cube['measures']:
+            cube['measures'] = cls._db_measures
+
+        return cube
+
+    @classmethod
+    def dice(cls, coordinates=[], measures=[], filters={}):
+        cube = cls.build_cube(coordinates, measures, filters)
 
         fn_msr = []
         msr_idx = {}
         xtr_msr = []
-        if not cube_msrs:
-            cube_msrs = cls._db_measures
-        else:
-            # Collect computed measure from the query
-            for pos, m in enumerate(cube_msrs):
-                if isinstance(m, measure.Computed):
-                    cube_msrs[pos] = None
-                    fn_msr.append((pos, m))
-            # Collapse resulting list
-            cube_msrs = list(filter(None, cube_msrs))
+        # Collect computed measure from the query
+        for pos, m in enumerate(cube['measures']):
+            if isinstance(m, measure.Computed):
+                cube['measures'][pos] = None
+                fn_msr.append((pos, m))
+        # Collapse resulting list
+        cube['measures'] = list(filter(None, cube['measures']))
 
         if fn_msr:
             # Build msr_idx to acces future values by position
-            for pos, m in enumerate(cube_msrs):
+            for pos, m in enumerate(cube['measures']):
                 msr_idx[m.name] = pos
 
             # Add extra measure if needed
@@ -190,15 +196,18 @@ class Space(metaclass=MetaSpace):
                     if arg not in msr_idx:
                         new_msr = getattr(cls, arg)
                         xtr_msr.append(new_msr)
-                        pos = len(xtr_msr) + len(cube_msrs) - 1
+                        pos = len(xtr_msr) + len(cube['measures']) - 1
                         msr_idx[arg] = pos
-            cube_msrs = cube_msrs + xtr_msr
+            cube['measures'] = cube['measures'] + xtr_msr
 
-        rows = cls._db.dice(cls, cube, cube_msrs, cube_filters)
-        nb_dim = len(cube_dims)
+        rows = cls._db.dice(cls, cube['dimensions'], cube['measures'],
+                            cube['filters'])
+
+        nb_dim = len(cube['dimensions'])
+        cube_dims = [x[0] for x in cube['dimensions']]
         nb_xtr = len(xtr_msr)
 
-        # Yield key, value tuples (allows building a dict)
+        # Yield (key, values) tuples (allows building a dict)
         for row in rows:
             # Key is the combination of coordinates
             key = tuple(d.get_name(i) for i, d in zip(row, cube_dims))
@@ -241,6 +250,15 @@ class Space(metaclass=MetaSpace):
         while fpos is not None:
             yield fval
             fpos, fval = next(fn_vals, (None, None))
+
+    @classmethod
+    def snapshot(cls, other_space):
+        dimensions = [(d, d.key(tuple()), len(d.levels)) \
+                      for d in other_space._dimensions]
+        cls._db.snapshot(cls, other_space,
+                         dimensions,
+                         other_space._db_measures,
+                     )
 
     @classmethod
     def get_dimension(cls, name):

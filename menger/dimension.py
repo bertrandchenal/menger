@@ -174,7 +174,6 @@ class Tree(Dimension):
             '/'.join(map(str, coord)), self.name))
 
     def reparent(self, coord, new_parent_coord):
-        from . import UserError
         curr_parent = coord[:-1]
         if curr_parent == new_parent_coord:
             return
