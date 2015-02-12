@@ -25,8 +25,10 @@ class SqliteBackend(SqlBackend):
             # Closure table for the dimension
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ('
-                'parent INTEGER REFERENCES "%s" (id) ON DELETE CASCADE, '
-                'child INTEGER REFERENCES "%s" (id) ON DELETE CASCADE, '
+                'parent INTEGER REFERENCES "%s" (id) '
+                  'ON DELETE CASCADE NOT NULL, '
+                'child INTEGER REFERENCES "%s" (id) '
+                  'ON DELETE CASCADE NOT NULL, '
                 'depth INTEGER)' % (dim.closure_table, dim.table,
                                     dim.table))
 
@@ -37,7 +39,7 @@ class SqliteBackend(SqlBackend):
 
         # Space (main) table
         cols = ', '.join(chain(
-            ('"%s" INTEGER REFERENCES %s (id) ON DELETE CASCADE NOT NULL ' % (
+            ('"%s" INTEGER REFERENCES %s (id) NOT NULL ' % (
                 dim.name,  dim.table
             ) for dim in space._dimensions),
             ('"%s" %s NOT NULL' % (msr.name, msr.sql_type) \
@@ -90,9 +92,10 @@ class SqliteBackend(SqlBackend):
         self.insert_stm[space._name] = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
             space._table, field_stm, val_stm)
 
-    def load(self, space, keys_vals):
+    def load(self, space, keys_vals, increment=False):
         # TODO check for equivalent in postgresql
-        nb_edit = super(SqliteBackend, self).load(space, keys_vals)
+        nb_edit = super(SqliteBackend, self).load(
+            space, keys_vals, increment=increment)
         self.cursor.execute('ANALYZE')
         return nb_edit
 
@@ -148,6 +151,91 @@ class SqliteBackend(SqlBackend):
             'INSERT INTO %s (parent, child, depth) values (?, ?, ?)' % cls,
             values
         )
+
+    def merge(self, dim, parent_id, spaces):
+        '''
+        Merge two subtrees. If one name appear twice under the same parent
+        one of them (with the biggest id) will be deleted and replaced
+        by the other. If more than one dupicate is present this method
+        must be re-executed (but it shouldn't be needed if called
+        appropriately)
+        '''
+
+        # Find ids to merge
+        self.cursor.execute(
+            'SELECT name, min(child), max(child), count(*) as cnt '
+            'FROM "%(cls)s" '
+            'JOIN "%(dim)s" ON (child = id) '
+            'WHERE depth = 1 AND parent = ? '
+            'GROUP BY name HAVING cnt > 1' % {
+                'cls': dim.closure_table,
+                'dim': dim.table,
+            }, (parent_id,))
+
+        for name, id_min, id_max, cnt in self.cursor:
+            self.cursor.execute(
+                'UPDATE "%(cls)s" SET parent = ? WHERE parent = ?' % {
+                'cls': dim.closure_table,
+            }, (id_min, id_max))
+
+            # Update space to use the new id
+            for space in spaces:
+                if not hasattr(space, dim.name):
+                    continue
+
+                # Fetch lines containing id_max (injecting id_min)
+                select_cols = []
+                for spc_dim in space._dimensions:
+                    if spc_dim.name == dim.name:
+                        select_cols.append("?")
+                    else:
+                        select_cols.append(spc_dim.name)
+                select_cols.extend(m.name for m in  space._db_measures)
+                self.cursor.execute(
+                    'SELECT %(select_cols)s FROM "%(spc)s" '
+                    'WHERE %(col)s = ?' % {
+                        'spc': space._table,
+                        'col': dim.name,
+                        'select_cols': ','.join(select_cols),
+                    }, (id_min, id_max,))
+
+                # Re-import the data
+                nd = len(space._dimensions)
+                data = ((r[:nd], r[nd:]) for r in self.cursor)
+                self.load(space, data, increment=True)
+
+                # Delete obsoleted lines
+                self.cursor.execute(
+                    'DELETE FROM "%(spc)s" WHERE %(col)s = ?' % {
+                        'spc': space._table,
+                        'col': dim.name,
+                    }, (id_max,))
+
+            # Clean old records
+            self.cursor.execute(
+                'DELETE FROM "%(dim)s" WHERE id = ?' % {
+                'dim': dim.table,
+            }, (id_max,))
+
+            # Recurse on childs
+            self.merge(dim, id_min, spaces)
+
+
+    def prune(self, dim, parent_id):
+        '''
+        Will delete the given node if no children are found
+        '''
+        self.cursor.execute(
+            'SELECT count(*) FROM %(cls)s '
+            'WHERE parent = ? and depth = 1' % {'cls': dim.closure_table},
+            (parent_id,)
+        )
+        cnt, = next(self.cursor)
+        if cnt > 0:
+            return
+
+        self.cursor.execute('DELETE FROM %s WHERE id = ?' % dim.table,
+                            (parent_id,))
 
     def rename(self, dim, record_id, new_name):
         self.cursor.execute('UPDATE %s SET name = ? WHERE id = ?' % dim.table,

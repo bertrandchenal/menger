@@ -1,25 +1,16 @@
+from collections import OrderedDict
 from copy import copy
-from itertools import product, chain
-from collections import OrderedDict, defaultdict
+from hashlib import md5
+from itertools import chain
 from json import dumps
 
 from . import backend
 from . import dimension
 from . import measure
+from .event import trigger
 
 SPACES = {}
 SPACE_LIST = []
-
-EVENTS = defaultdict(list)
-
-def register(event_name, callback):
-    if callback not in EVENTS[event_name]:
-        EVENTS[event_name].append(callback)
-
-def trigger(event_name):
-    for callback in EVENTS[event_name]:
-        callback()
-
 
 class MetaSpace(type):
 
@@ -107,7 +98,7 @@ class Space(metaclass=MetaSpace):
     @classmethod
     def load(cls, points):
         nb_edit = cls._db.load(cls, cls.convert(points))
-        trigger('load')
+        trigger('clear_cache')
         return nb_edit
 
     @classmethod
@@ -200,6 +191,7 @@ class Space(metaclass=MetaSpace):
                         msr_idx[arg] = pos
             cube['measures'] = cube['measures'] + xtr_msr
 
+
         rows = cls._db.dice(cls, cube['dimensions'], cube['measures'],
                             cube['filters'])
 
@@ -207,7 +199,7 @@ class Space(metaclass=MetaSpace):
         cube_dims = [x[0] for x in cube['dimensions']]
         nb_xtr = len(xtr_msr)
 
-        # Yield (key, values) tuples (allows building a dict)
+        # Returns (key, values) tuples (allows building a dict)
         for row in rows:
             # Key is the combination of coordinates
             key = tuple(d.get_name(i) for i, d in zip(row, cube_dims))

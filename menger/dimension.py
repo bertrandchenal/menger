@@ -1,6 +1,7 @@
 from collections import defaultdict
 from itertools import chain, islice
 
+from .event import register, trigger
 
 class Dimension(object):
 
@@ -22,6 +23,7 @@ class Dimension(object):
                 type, label
             ))
         self.init_cache()
+        register('clear_cache', self.init_cache)
 
     def set_db(self, db):
         self.db = db
@@ -174,6 +176,9 @@ class Tree(Dimension):
             '/'.join(map(str, coord)), self.name))
 
     def reparent(self, coord, new_parent_coord):
+        # Late import to avoid loop
+        from .space import iter_spaces
+
         curr_parent = coord[:-1]
         if curr_parent == new_parent_coord:
             return
@@ -182,11 +187,25 @@ class Tree(Dimension):
         new_parent_id = self.key(new_parent_coord)
         self.db.reparent(self, record_id, new_parent_id)
 
+        # Merge any resulting duplicate
+        self.db.merge(self, new_parent_id, iter_spaces())
+
+        # Prune old parent
+        self.db.prune(self, self.key(curr_parent))
+
         # Reset cache
-        self.init_cache()
+        trigger('clear_cache')
 
     def rename(self, coord, new_name):
+        # Late import to avoid loop
+        from .space import iter_spaces
+
         record_id = self.key(coord)
         self.db.rename(self, record_id, new_name)
+
+        # Merge any resulting duplicate
+        parent_id = self.key(coord[:-1])
+        self.db.merge(self, parent_id, iter_spaces())
+
         # Reset cache
-        self.init_cache()
+        trigger('clear_cache')

@@ -1,9 +1,10 @@
 from contextlib import contextmanager
 
-from .space import Space, build_space, SPACES, get_space, iter_spaces, register
+from .space import Space, build_space, SPACES, get_space, iter_spaces
 from . import backend
 from .dimension import Dimension
 from .measure import Measure
+from .event import register
 
 
 class UserError(Exception):
@@ -24,4 +25,3 @@ def connect(uri, rollback_on_close=False):
         db.register(cls)
     yield
     db.close(rollback=rollback_on_close)
-
