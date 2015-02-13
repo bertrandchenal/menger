@@ -297,3 +297,25 @@ def test_merge_rename(session):
         },
     ]
     drill_check(rename_drill_checks)
+
+
+def test_delete(session):
+
+    Cube.place.delete(('USA',))
+
+    dice_check([
+        {'coordinates': [],
+         'measures': ['total', 'count'],
+         'values' :[
+             ((), (14.0, 3.0)),
+         ]
+     },
+    ])
+
+    drill_check([
+        {
+            'coordinate' : tuple(),
+            'result': ['EU'],
+            'dimension': 'place',
+        },
+    ])

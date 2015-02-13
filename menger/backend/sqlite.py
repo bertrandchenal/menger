@@ -10,11 +10,10 @@ class SqliteBackend(SqlBackend):
         self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA journal_mode=WAL')
+        self.cursor.execute('PRAGMA foreign_keys=1')
         super(SqliteBackend, self).__init__()
 
     def register(self, space):
-        self.cursor.execute('PRAGMA foreign_keys=1')
-
         for dim in space._dimensions:
             # Dimension table
             self.cursor.execute(
@@ -39,7 +38,7 @@ class SqliteBackend(SqlBackend):
 
         # Space (main) table
         cols = ', '.join(chain(
-            ('"%s" INTEGER REFERENCES %s (id) NOT NULL ' % (
+            ('"%s" INTEGER REFERENCES %s (id) ON DELETE CASCADE NOT NULL ' % (
                 dim.name,  dim.table
             ) for dim in space._dimensions),
             ('"%s" %s NOT NULL' % (msr.name, msr.sql_type) \
@@ -119,7 +118,12 @@ class SqliteBackend(SqlBackend):
 
     def delete_coordinate(self, dim, coord_id):
         self.cursor.execute(
-            'DELETE FROM %s WHERE id = ?' % dim.table, (coord_id,))
+            'DELETE FROM %(dim)s WHERE id IN '
+            '(SELECT CHILD FROM %(cls)s WHERE parent = ?)' % {
+                'dim': dim.table,
+                'cls': dim.closure_table
+            }, (coord_id,))
+
 
     def reparent(self, dim, child, new_parent):
         """

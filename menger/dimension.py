@@ -70,6 +70,8 @@ class Tree(Dimension):
         if not coord_id:
             return
         self.db.delete_coordinate(self, coord_id)
+        # Reset cache
+        trigger('clear_cache')
 
     def get_id(self, coord):
         parent = coord[:-1]
