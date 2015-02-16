@@ -1,11 +1,11 @@
 from contextlib import contextmanager
 
-from .space import Space, build_space, SPACES, get_space, iter_spaces
 from . import backend
 from .dimension import Dimension
-from .measure import Measure
 from .event import register
-
+from .measure import Measure
+from .space import Space, build_space, SPACES, get_space, iter_spaces
+from .utils import Cli
 
 class UserError(Exception):
     pass
