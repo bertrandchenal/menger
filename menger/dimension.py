@@ -38,6 +38,8 @@ class Dimension(object):
         self.name_cache = {}
         self.full_name_cache = {}
 
+    def expand(self, values):
+        return values
 
 class Tree(Dimension):
 
