@@ -378,3 +378,16 @@ class SqliteBackend(SqlBackend):
                         break
             else:
                 yield col_name, 'measure', col_type, None
+
+    def search(self, dim, substring):
+        query = 'SELECT name, depth FROM %(dim)s ' \
+                'JOIN %(cls)s ON (parent = 1 and child = id) '\
+                'WHERE name like ? '\
+                'GROUP BY name, depth '\
+                'ORDER BY depth, name '\
+                % {
+                    'dim': dim.table,
+                    'cls': dim.closure_table,
+                }
+        self.cursor.execute(query, ('%' + substring + '%',))
+        return self.cursor

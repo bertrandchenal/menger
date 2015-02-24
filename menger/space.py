@@ -122,7 +122,7 @@ class Space(metaclass=MetaSpace):
         return cls._db.dice(key) # FIXME signature looks wrong
 
     @classmethod
-    def build_cube(cls, coordinates=[], measures=[], filters={}):
+    def build_cube(cls, coordinates=[], measures=[], filters=[]):
         cube = {
             'dimensions': [],
             'measures': [],
@@ -133,7 +133,7 @@ class Space(metaclass=MetaSpace):
             key, depth = dim.explode(value)
             cube['dimensions'].append((dim, key, depth))
 
-        for name, values in filters.items():
+        for name, values in filters:
             dim = cls.get_dimension(name)
             key_depths = []
             for value in values:
@@ -162,7 +162,7 @@ class Space(metaclass=MetaSpace):
         return cube
 
     @classmethod
-    def dice(cls, coordinates=[], measures=[], filters={}):
+    def dice(cls, coordinates=[], measures=[], filters=[]):
         cube = cls.build_cube(coordinates, measures, filters)
 
         fn_msr = []
