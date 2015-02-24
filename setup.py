@@ -13,7 +13,6 @@ setup(name='Menger',
       author_email='bertrandchenal@gmail.com',
       url='https://bitbucket.org/bertrandchenal/menger',
       packages=['menger', 'menger.backend'],
-      scripts=['bin/mng'],
       requires=[],
       license='ISC',
       classifiers=[
