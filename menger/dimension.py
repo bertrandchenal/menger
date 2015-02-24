@@ -41,6 +41,9 @@ class Dimension(object):
     def expand(self, values):
         return values
 
+    def aliases(self, values):
+        return []
+
 class Tree(Dimension):
 
     def __init__(self, label, levels, type=str, alias=None, ):
