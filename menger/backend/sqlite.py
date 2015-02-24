@@ -274,7 +274,7 @@ class SqliteBackend(SqlBackend):
         for pos, (dim, key, depth) in enumerate(cube):
             alias = 'join_%s' % pos
             joins.append(self.child_join(space, dim, alias))
-            f = '%s.parent'% alias
+            f = '%s.parent' % alias
             select.append(f)
             group_by.append(f)
             params[alias + '_key'] = key
