@@ -115,13 +115,6 @@ class Space(metaclass=MetaSpace):
             yield coords, values
 
     @classmethod
-    def get(cls, point):
-        key = cls.key(point)
-        if key is None:
-            return tuple(0 for m in cls._measures)
-        return cls._db.dice(key) # FIXME signature looks wrong
-
-    @classmethod
     def build_cube(cls, coordinates=[], measures=[], filters=[]):
         cube = {
             'dimensions': [],
