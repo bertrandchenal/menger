@@ -366,7 +366,6 @@ class SqliteBackend(SqlBackend):
 
         # Add conditions defined by filters
         total_depth = parent_depth + depth
-        print(filters)
         for key_depths in filters:
             sub_conds = []
             for key, filter_depth in key_depths:
