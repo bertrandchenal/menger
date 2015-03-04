@@ -115,7 +115,11 @@ class Space(metaclass=MetaSpace):
             yield coords, values
 
     @classmethod
-    def build_cube(cls, coordinates=[], measures=[], filters=[]):
+    def build_cube(cls, coordinates=None, measures=None, filters=None):
+        coordinates = coordinates or []
+        measures = measures or []
+        filters = filters or []
+
         cube = {
             'dimensions': [],
             'measures': [],

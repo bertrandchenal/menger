@@ -42,12 +42,15 @@ def drill_check(to_check):
         res = list(dim.drill(coordinate))
         assert res == check['result']
 
-
 def dice_check(to_check):
     for check in to_check:
         coordinates = check['coordinates']
         measures = check['measures']
-        res = sorted(Cube.dice(coordinates=coordinates, measures=measures))
+        filters = check.get('filters')
+        res = sorted(Cube.dice(
+            coordinates=coordinates,
+            measures=measures,
+            filters=filters))
         assert res == check['values']
 
 
@@ -319,3 +322,53 @@ def test_delete(session):
             'dimension': 'place',
         },
     ])
+
+def test_glob(session):
+    res = Cube.date.glob((None, 1, None))
+    assert res == [(2014, 1, 1), (2014, 1, 2)]
+
+    res = Cube.date.glob((None, None, 1))
+    assert res == [(2014, 1, 1)]
+
+    res = Cube.date.glob((None, None))
+    assert res == [(2014, 1)]
+
+    res = Cube.date.glob((2014, None))
+    assert res == [(2014, 1)]
+
+    res = Cube.date.glob((2014,))
+    assert res == [(2014,)]
+
+    res = Cube.date.glob(tuple())
+    assert res == [tuple()]
+
+def test_dice_filter(session):
+    filters = [('date', [(2014, 1, 1)])]
+    checks = [
+        {'coordinates': [],
+         'measures': ['total', 'count'],
+         'filters': filters,
+         'values' : [((), (10.0, 2.0))]
+     },
+    ]
+    dice_check(checks)
+
+def test_glob_filter(session):
+    filters = [[(2014, 1, 1)]]
+    res = Cube.date.glob((None, 1, None), filters=filters)
+    assert res == [(2014, 1, 1)]
+
+    # (2014, 1, 1) OR(2014, 1, 2)
+    filters = [[(2014, 1, 1), (2014, 1, 2)]]
+    res = Cube.date.glob((None, 1, None), filters=filters)
+    assert res == [(2014, 1, 1), (2014, 1, 2)]
+
+    # (2014, 1, 1) AND (2014, 1, 2)
+    filters = [[(2014, 1, 1)], [(2014, 1, 2)]]
+    res = Cube.date.glob((None, 1, None), filters=filters)
+    assert res == []
+
+    # (2014, 1, 1) AND (2014, 1)
+    filters = [[(2014, 1, 1)], [(2014, 1)]]
+    res = Cube.date.glob((None, 1, None), filters=filters)
+    assert res == [(2014, 1, 1)]

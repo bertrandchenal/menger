@@ -105,7 +105,7 @@ class Tree(Dimension):
 
         name, parent = self.name_cache.get(coord_id, (None, None))
         if name is None:
-            return ''
+            return tuple()
 
         parent_name = self.get_name(parent)
         if parent_name:
