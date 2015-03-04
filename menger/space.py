@@ -96,23 +96,40 @@ class Space(metaclass=MetaSpace):
         return key
 
     @classmethod
-    def load(cls, points):
-        nb_edit = cls._db.load(cls, cls.convert(points))
+    def load(cls, points, filters=None):
+        nb_edit = cls._db.load(cls, cls.convert(points, filters=filters))
         trigger('clear_cache')
         return nb_edit
 
     @classmethod
-    def convert(cls, points):
+    def convert(cls, points, filters=None):
         """
         Convert a list of points into a list of tuple (key, values)
         """
         for point in points:
+            if filters and not cls.match(point, filters):
+                continue
             values = tuple(point[m.name] for m in cls._db_measures)
             coords = tuple(
                 d.key(tuple(point[d.name]), create=True) \
                 for d in cls._dimensions
             )
             yield coords, values
+
+    @classmethod
+    def match(cls, point, filters):
+        # AND lopp
+        for name, values in filters:
+            coord = point[name]
+            # OR loop
+            for value in values:
+                # coord len is always longer or equal to value's
+                if all(x == y for x, y in zip(coord, value)):
+                    break
+            else:
+                # No value match coord
+                return False
+        return True
 
     @classmethod
     def build_cube(cls, coordinates=None, measures=None, filters=None):

@@ -342,6 +342,7 @@ def test_glob(session):
     res = Cube.date.glob(tuple())
     assert res == [tuple()]
 
+
 def test_dice_filter(session):
     filters = [('date', [(2014, 1, 1)])]
     checks = [
@@ -352,6 +353,7 @@ def test_dice_filter(session):
      },
     ]
     dice_check(checks)
+
 
 def test_glob_filter(session):
     filters = [[(2014, 1, 1)]]
@@ -372,3 +374,74 @@ def test_glob_filter(session):
     filters = [[(2014, 1, 1)], [(2014, 1)]]
     res = Cube.date.glob((None, 1, None), filters=filters)
     assert res == [(2014, 1, 1)]
+
+
+def test_load_filter(session):
+    # Filter match
+    data = [
+        {'date': [2014, 1, 3],
+         'place': ['USA', 'BE', 'BRU'],
+         'total': 32,
+         'count': 1},
+    ]
+    filters = [
+        ('date', [(2014,)]),
+    ]
+    Cube.load(data, filters=filters)
+    dice_check([
+        {'coordinates': [('date', (2014, 1, 3))],
+         'measures': ['total', 'count'],
+         'values' : [(((2014, 1, 3),), (32.0, 1.0))]
+     }])
+
+    # Filter doesn't
+    data = [
+        {'date': [2014, 1, 3],
+         'place': ['USA', 'BE', 'BRU'],
+         'total': 64,
+         'count': 1},
+    ]
+    filters = [
+        ('date', [(2015,)]),
+    ]
+    Cube.load(data, filters=filters)
+    dice_check([
+        {'coordinates': [('date', (2014, 1, 3))],
+         'measures': ['total', 'count'],
+         'values' : [(((2014, 1, 3),), (32.0, 1.0))]
+     }])
+
+    # Filter does and doesn't (OR clause)
+    data = [
+        {'date': [2014, 1, 3],
+         'place': ['USA', 'BE', 'BRU'],
+         'total': 128,
+         'count': 1},
+    ]
+    filters = [
+        ('date', [(2015,), (2014,)]),
+    ]
+    Cube.load(data, filters=filters)
+    dice_check([
+        {'coordinates': [('date', (2014, 1, 3))],
+         'measures': ['total', 'count'],
+         'values' : [(((2014, 1, 3),), (128.0, 1.0))]
+     }])
+
+    # Filter does and doesn't (AND clause)
+    data = [
+        {'date': [2014, 1, 3],
+         'place': ['USA', 'BE', 'BRU'],
+         'total': 256,
+         'count': 1},
+    ]
+    filters = [
+        ('date', [(2015,)]),
+        ('date', [(2014,)]),
+    ]
+    Cube.load(data, filters=filters)
+    dice_check([
+        {'coordinates': [('date', (2014, 1, 3))],
+         'measures': ['total', 'count'],
+         'values' : [(((2014, 1, 3),), (128.0, 1.0))]
+     }])
