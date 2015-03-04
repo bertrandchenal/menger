@@ -308,7 +308,6 @@ class SqliteBackend(SqlBackend):
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
 
-
         return stm, params
 
     def dice(self, space, cube, msrs, filters=[]):
@@ -334,6 +333,68 @@ class SqliteBackend(SqlBackend):
                }
 
         return join
+
+    def glob(self, dim, parent_id, parent_depth, values, filters=[]):
+        depth = len(values)
+        query_args = {
+            'parent_id': parent_id,
+            'depth': depth,
+        }
+        format_args = {
+            'cls': dim.closure_table,
+            'dim': dim.table,
+        }
+        select = 'SELECT child from %(cls)s WHERE ' \
+                 'parent = :parent_id AND depth = :depth'
+
+        # Add condtions defined by value
+        conditions = []
+        for pos, name in enumerate(values):
+            if name is None:
+                continue
+            query_args['name_%s' % pos] = name
+            query_args['depth_%s' % pos] = depth - pos - 1
+            cond = 'child IN ('\
+                   'SELECT child FROM %(cls)s '\
+                   'JOIN %(dim)s ON (parent=id) '\
+                   'WHERE name = :name_%(pos)s AND depth=:depth_%(pos)s)' % {
+                       'cls': dim.closure_table,
+                       'dim': dim.table,
+                       'pos': pos,
+                   }
+            conditions.append(cond)
+
+        # Add conditions defined by filters
+        total_depth = parent_depth + depth
+        print(filters)
+        for key_depths in filters:
+            sub_conds = []
+            for key, filter_depth in key_depths:
+                select_field, cond_field = 'child', 'parent'
+                if filter_depth > total_depth:
+                    select_field, cond_field = cond_field, select_field
+
+                cond_field = 'parent' if filter_depth < total_depth else 'child'
+                delta = abs(filter_depth - total_depth)
+                sub_sel = 'SELECT %(select_field)s FROM %(cls)s WHERE '\
+                          '(%(cond_field)s = %(key)s AND depth = %(delta)s)' % {
+                              'select_field': select_field,
+                              'cond_field': cond_field,
+                              'key': key,
+                              'delta': delta,
+                              'cls': dim.closure_table,
+                          }
+                sub_conds.append(sub_sel)
+
+            cond = 'child in (%s)' % ' UNION '.join(sub_conds)
+            conditions.append(cond)
+
+        query = select
+        if conditions:
+            query += ' AND ' + ' AND '.join(conditions)
+
+        self.cursor.execute(query % format_args, query_args)
+        return self.cursor.fetchall()
 
     def snapshot(self, space, other_space, cube, msrs, filters=[]):
         query = 'DELETE FROM %s' % other_space._table

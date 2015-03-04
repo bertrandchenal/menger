@@ -80,15 +80,15 @@ class Cli(object):
             print(' ' + msr.name, file=self.fd)
 
     def drill(self, name, values):
-        values = values or tuple()
+        values = values or (None,)
 
         if not hasattr(self.space, name):
             exit('"%s" has no dimension "%s"' % (
                     self.space._name, name))
 
         dim = getattr(self.space, name)
-        for name in dim.drill(values):
-            print('/'.join(map(str, values + (name,))), file=self.fd)
+        for res in sorted(dim.glob(values)):
+            print('/'.join(map(str, res)), file=self.fd)
 
     def do_load(self):
         for path in self.args:

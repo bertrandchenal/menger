@@ -1,7 +1,10 @@
 from collections import defaultdict
-from itertools import chain, islice
+from itertools import islice, takewhile
 
 from .event import register, trigger
+
+not_none = lambda x: x is not None
+head = lambda x: tuple(takewhile(not_none, x))
 
 class Dimension(object):
 
@@ -133,27 +136,19 @@ class Tree(Dimension):
         for name, _ in sorted(children):
             yield name
 
-    def glob(self, value):
-        if not value:
-            # empty tuple
-            yield value
-            return
+    def glob(self, value, filters=[]):
+        key_depths = []
+        for vals in filters:
+            key_depths.append([(self.key(v), len(v)) for v in vals])
 
-        for res in self._glob([value]):
-            yield res
+        h = head(value)
+        tail = value[len(h):]
+        key_depths = []
+        for values in filters:
+            key_depths.append([(self.key(v), len(v)) for v in values])
 
-    def _glob(self, values):
-        for value in values:
-            for pos, val in enumerate(value):
-                if val is None:
-                    for child in self.drill(value[:pos]):
-                        child_glob = value[:pos] + (child,) + value[pos+1:]
-                        for res in self._glob([child_glob]):
-                            yield res
-                    break
-            else:
-                # No None found
-                yield value
+        res = self.db.glob(self, self.key(h), len(h), tail, key_depths)
+        return [self.get_name(child_id) for child_id, in res]
 
     def explode(self, coord):
         if coord is None:
