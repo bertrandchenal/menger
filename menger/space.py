@@ -144,16 +144,15 @@ class Space(metaclass=MetaSpace):
 
         for name, values in filters.items():
             dim = cls.get_dimension(name)
-            key_depths = []
+            keys = []
             for value in values:
                 key = dim.key(value)
                 if key is None:
                     # filters value is not known (warning ?)
                     continue
-                depth = dim.depth - len(value)
-                key_depths.append((key, depth))
-            if key_depths:
-                cube['filters'].append((dim, key_depths))
+                keys.append(key)
+            if keys:
+                cube['filters'].append((dim, keys))
 
         for name in measures:
             if not hasattr(cls, name):
