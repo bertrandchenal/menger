@@ -34,23 +34,23 @@ class Sum(Measure):
 
 class Computed(Measure):
 
-    def __init__(self, label, fn,  args=[]):
-        self.fn = fn
+    def __init__(self, label,  *args):
         self.args = args
         super(Computed, self).__init__(label)
 
-    def compute(self, args):
-        return self.fn(*args)
+    def compute(self, *args):
+        raise NotImplementedError
 
 
 class Average(Computed):
 
-    def __init__(self, label, total, count):
-        fn = self.division
-        args = [total, count]
-        super(Average, self).__init__(label, fn=fn, args=args)
-
-    def division(self, total, count):
+    def compute(self, total, count):
         if count == 0:
             return 0
         return total / count
+
+
+class Difference(Computed):
+
+    def compute(self, first_msr, second_msr):
+        return first_msr - second_msr

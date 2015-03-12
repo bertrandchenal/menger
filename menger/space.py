@@ -227,7 +227,7 @@ class Space(metaclass=MetaSpace):
             for pos, m in fn_msr:
                 # Build arguments and launch computation
                 args = [values[msr_idx[name]] for name in m.args]
-                val = m.compute(args)
+                val = m.compute(*args)
                 fn_vals.append((pos, val))
 
             if nb_xtr:
