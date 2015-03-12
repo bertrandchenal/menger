@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 
-from . import backend
+from .backend import get_backend, LoadType
 from .dimension import Dimension
 from .event import register
 from .measure import Measure

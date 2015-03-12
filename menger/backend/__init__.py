@@ -1,4 +1,4 @@
-from .sql import SqlBackend
+from .sql import SqlBackend, LoadType
 from .sqlite import SqliteBackend
 
 try:

@@ -96,8 +96,9 @@ class Space(metaclass=MetaSpace):
         return key
 
     @classmethod
-    def load(cls, points, filters=None):
-        nb_edit = cls._db.load(cls, cls.convert(points, filters=filters))
+    def load(cls, points, filters=None, load_type=None):
+        nb_edit = cls._db.load(cls, cls.convert(points, filters=filters),
+                               load_type=load_type)
         trigger('clear_cache')
         return nb_edit
 

@@ -1,7 +1,13 @@
+from enum import Enum
 from itertools import tee
 from operator import add
+
 from .base import BaseBackend
 
+class LoadType(Enum):
+    default = 0
+    increment = 1
+    create_only = 2
 
 class SqlBackend(BaseBackend):
 
@@ -10,13 +16,15 @@ class SqlBackend(BaseBackend):
         self.insert_stm = {}
         self.update_stm = {}
 
-    def load(self, space, keys_vals, increment=False):
+    def load(self, space, keys_vals, load_type=None):
         nb_edit = 0
         for key, vals in keys_vals:
             db_vals = self.get(space, key)
             if not db_vals:
                 self.insert(space, key, vals)
-            elif increment:
+            elif load_type == LoadType.create_only:
+                continue
+            elif load_type == LoadType.increment:
                 map(add, db_vals, vals)
                 self.update(space, key, vals)
             elif db_vals != vals:

@@ -1,7 +1,7 @@
 from itertools import chain, repeat
 import sqlite3
 
-from .sql import SqlBackend
+from .sql import SqlBackend, LoadType
 
 
 class SqliteBackend(SqlBackend):
@@ -91,10 +91,10 @@ class SqliteBackend(SqlBackend):
         self.insert_stm[space._name] = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
             space._table, field_stm, val_stm)
 
-    def load(self, space, keys_vals, increment=False):
+    def load(self, space, keys_vals, load_type=None):
         # TODO check for equivalent in postgresql
         nb_edit = super(SqliteBackend, self).load(
-            space, keys_vals, increment=increment)
+            space, keys_vals, load_type=load_type)
         self.cursor.execute('ANALYZE')
         return nb_edit
 
@@ -104,15 +104,16 @@ class SqliteBackend(SqlBackend):
             'INSERT into %s (name) VALUES (?)' % dim.table, (name,))
         last_id = self.cursor.lastrowid
 
-        # Fetch parent depth + 1 as last_id from the closure table ...
-        self.cursor.execute(
-            'SELECT parent, ? as child, depth+1 FROM "%s" '
-            'WHERE child = ?' % dim.closure_table, (last_id, parent_id))
+        # New coordinate share same parents than parent_id but at one
+        # more depth
+        stm = 'INSERT INTO "%(cls)s" (parent, child, depth) '\
+              'SELECT parent, ? as child, depth+1 FROM "%(cls)s" ' \
+              'WHERE child = ?' % {'cls': dim.closure_table}
+        self.cursor.execute(stm, (last_id, parent_id))
 
-        # ... and insert them
-        stm = 'INSERT INTO %s (parent, child, depth) '\
-            ' VALUES (?, ?, ?)' % dim.closure_table
-        self.cursor.executemany(stm, self.cursor.fetchall())
+        # Add self reference
+        stm = 'INSERT INTO "%(cls)s" (parent, child, depth) '\
+              'VALUES (?, ?, ?)' % {'cls': dim.closure_table}
         self.cursor.execute(stm, (last_id, last_id, 0))
         return last_id
 
@@ -206,7 +207,7 @@ class SqliteBackend(SqlBackend):
                 # Re-import the data
                 nd = len(space._dimensions)
                 data = ((r[:nd], r[nd:]) for r in self.cursor)
-                self.load(space, data, increment=True)
+                self.load(space, data, load_type=LoadType.increment)
 
                 # Delete obsoleted lines
                 self.cursor.execute(
