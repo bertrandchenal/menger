@@ -33,6 +33,14 @@ class Cube(Space):
     count = measure.Sum('Count')
     average = measure.Average('Average', 'total', 'count')
 
+class OtherCube(Space):
+    date = dimension.Tree('Date', ['Year', 'Month', 'Day'], int)
+    place = dimension.Tree('Place', ['Region', 'Country', 'City'], str)
+
+    total = measure.Sum('Total')
+    count = measure.Sum('Count')
+    average = measure.Average('Average', 'total', 'count')
+
 
 def drill_check(to_check):
     for check in to_check:
@@ -42,12 +50,13 @@ def drill_check(to_check):
         res = list(dim.drill(coordinate))
         assert res == check['result']
 
-def dice_check(to_check):
+def dice_check(to_check, cube=None):
+    cube = cube or Cube
     for check in to_check:
         coordinates = check['coordinates']
         measures = check['measures']
         filters = check.get('filters')
-        res = sorted(Cube.dice(
+        res = sorted(cube.dice(
             coordinates=coordinates,
             measures=measures,
             filters=filters))
@@ -65,7 +74,7 @@ def session():
         yield 'session'
 
 
-def test_dice(session):
+def test_dice(session, cube=None):
     checks = [
         {'coordinates': [],
          'measures': ['total', 'count'],
@@ -90,7 +99,7 @@ def test_dice(session):
          ]
      },
     ]
-    dice_check(checks)
+    dice_check(checks, cube=cube)
 
 
 def test_drill(session):
@@ -445,3 +454,19 @@ def test_load_filter(session):
          'measures': ['total', 'count'],
          'values' : [(((2014, 1, 3),), (128.0, 1.0))]
      }])
+
+
+def test_snapshot(session):
+    Cube.snapshot(OtherCube)
+    test_dice(session, OtherCube)
+
+def test_snapshot_filter(session):
+    filters = [('date', [(2014, 1, 1)])]
+    Cube.snapshot(OtherCube, filters)
+    checks = [
+        {'coordinates': [],
+         'measures': ['total', 'count'],
+         'values' : [((), (10.0, 2.0))]
+     },
+    ]
+    dice_check(checks, OtherCube)

@@ -267,38 +267,28 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def dice_query(self, space, cube, msrs, filters=[]):
+    def dice_query(self, space, cube, msrs, filters=None):
         select = []
         joins = []
         group_by = []
         params = {}
+
+        # Add dimensions to select
         for pos, (dim, key, depth) in enumerate(cube):
             alias = 'join_%s' % pos
-            joins.append(self.child_join(space, dim, alias))
+            joins.append(self.child_join(space, dim, alias, filters))
             f = '%s.parent' % alias
             select.append(f)
             group_by.append(f)
             params[alias + '_key'] = key
             params[alias + '_depth'] = depth
 
-        where = []
-        for dim, keys in filters:
-            conds = ('(parent = %s)' % key for key in keys)
-            subsel = '%(dim)s in (SELECT child FROM %(closure)s '\
-                   'WHERE %(cond)s )' % {
-                       'dim': dim.name,
-                       'closure': dim.closure_table,
-                       'cond': ' OR '.join(conds)
-                   }
-            where.append(subsel)
-
+        # Add measures to select
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
         stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
 
         if joins:
             stm += ' ' + ' '.join(joins)
-        if where:
-            stm += ' WHERE ' +  ' AND '.join(where)
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
 
@@ -309,24 +299,51 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm, params)
         return self.cursor.fetchall()
 
-    def child_join(self, spc, dim, alias):
+    def child_join(self, spc, dim, alias, filters):
+        # Build base condition to allow to group by parent
         subselect = 'SELECT child from "%(closure)s" ' \
-                    ' WHERE (parent = :%(alias)s_key' \
-                    ' AND depth = :%(alias)s_depth)' % {
+                    ' WHERE ('\
+                      'parent = :%(alias)s_key AND ' \
+                      'depth = :%(alias)s_depth'\
+                    ')' % {
                         'closure': dim.closure_table,
                         'alias': alias,
                     }
-        join = 'JOIN %(closure)s AS %(alias)s ' \
-               'ON (%(alias)s.child = "%(spc)s".%(dim)s ' \
-               'AND %(alias)s.parent IN (%(subselect)s))' % {
-                   'closure': dim.closure_table,
-                   'spc': spc._table,
-                   'dim': dim.name,
-                   'subselect': subselect,
-                   'alias': alias,
-               }
 
-        return join
+        # Add eventual filter condition
+        conds = []
+        if filters:
+            for filter_dim, keys in filters:
+                if filter_dim.name != dim.name:
+                    continue
+                conds.append(' OR '.join(
+                    ' parent = %s' %  key for key in keys
+                ))
+        if conds:
+            filter_cond = ' AND %(alias)s.parent IN ('\
+                          'SELECT CHILD FROM %(closure)s '\
+                          'WHERE ' + \
+                          ' AND '.join('(%s)' % c for c in conds) +\
+                          ')'
+        else:
+            filter_cond = ''
+
+        # Build join clause
+        join = 'JOIN %(closure)s AS %(alias)s ' \
+               'ON ('\
+                 '%(alias)s.child = "%(spc)s".%(dim)s ' \
+                 'AND %(alias)s.parent IN (%(subselect)s) ' +\
+                 filter_cond +\
+               ')'
+        params = {
+            'closure': dim.closure_table,
+            'spc': spc._table,
+            'dim': dim.name,
+            'subselect': subselect,
+            'alias': alias,
+        }
+
+        return join % params
 
     def glob(self, dim, parent_id, parent_depth, values, filters=[]):
         depth = len(values)
@@ -389,16 +406,33 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(query % format_args, query_args)
         return self.cursor.fetchall()
 
-    def snapshot(self, space, other_space, cube, msrs, filters=[]):
+    def build_filter_clause(self, filters):
+        if not filters:
+            return
+        where = []
+        for dim, keys in filters:
+            conds = (' parent = %s ' % key for key in keys)
+            subsel = '%(dim)s in (SELECT child FROM %(closure)s '\
+                   'WHERE %(cond)s )' % {
+                       'dim': dim.name,
+                       'closure': dim.closure_table,
+                       'cond': ' OR '.join(conds)
+                   }
+            where.append(subsel)
+        return ' AND '.join(where)
+
+    def snapshot(self, space, other_space, cube, msrs, filters=None):
+        # Delete existing data
         query = 'DELETE FROM %s' % other_space._table
+        filter_clause = self.build_filter_clause(filters)
+        if filter_clause:
+            query = query + ' WHERE ' + filter_clause
         self.cursor.execute(query)
-        rows = self.dice(space, cube, msrs, filters)
 
+        # Copy into other_space
         dice_stm , dice_params = self.dice_query(space, cube, msrs, filters)
-
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
-
         self.cursor.execute(stm, dice_params)
 
     def close(self, rollback=False):
@@ -433,15 +467,15 @@ class SqliteBackend(SqlBackend):
             else:
                 yield col_name, 'measure', col_type, None
 
-    def search(self, dim, substring):
+    def search(self, dim, substring, max_depth):
         query = 'SELECT name, depth FROM %(dim)s ' \
                 'JOIN %(cls)s ON (parent = 1 and child = id) '\
-                'WHERE name like ? '\
+                'WHERE name like ? AND depth <= ?'\
                 'GROUP BY name, depth '\
                 'ORDER BY depth, name '\
                 % {
                     'dim': dim.table,
                     'cls': dim.closure_table,
                 }
-        self.cursor.execute(query, ('%' + substring + '%',))
+        self.cursor.execute(query, ('%' + substring + '%', max_depth))
         return self.cursor

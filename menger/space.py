@@ -105,7 +105,7 @@ class Space(metaclass=MetaSpace):
     @classmethod
     def convert(cls, points, filters=None):
         """
-        Convert a list of points into a list of tuple (key, values)
+        Convert a list of points into a list of tuple (coord, values)
         """
         for point in points:
             if filters and not cls.match(point, filters):
@@ -132,6 +132,25 @@ class Space(metaclass=MetaSpace):
                 return False
         return True
 
+
+    @classmethod
+    def build_filters(cls, filters):
+        if not filters:
+            return
+        res = []
+        for name, values in filters:
+            dim = cls.get_dimension(name)
+            keys = []
+            for value in values:
+                key = dim.key(value)
+                if key is None:
+                    # filters value is not known (warning ?)
+                    continue
+                keys.append(key)
+            if keys:
+                res.append((dim, keys))
+        return res
+
     @classmethod
     def build_cube(cls, coordinates=None, measures=None, filters=None):
         coordinates = coordinates or []
@@ -148,17 +167,7 @@ class Space(metaclass=MetaSpace):
             key, depth = dim.explode(value)
             cube['dimensions'].append((dim, key, depth))
 
-        for name, values in filters:
-            dim = cls.get_dimension(name)
-            keys = []
-            for value in values:
-                key = dim.key(value)
-                if key is None:
-                    # filters value is not known (warning ?)
-                    continue
-                keys.append(key)
-            if keys:
-                cube['filters'].append((dim, keys))
+        cube['filters'] = cls.build_filters(filters)
 
         for name in measures:
             if not hasattr(cls, name):
@@ -258,13 +267,11 @@ class Space(metaclass=MetaSpace):
             fpos, fval = next(fn_vals, (None, None))
 
     @classmethod
-    def snapshot(cls, other_space):
-        dimensions = [(d, d.key(tuple()), len(d.levels)) \
-                      for d in other_space._dimensions]
-        cls._db.snapshot(cls, other_space,
-                         dimensions,
-                         other_space._db_measures,
-                     )
+    def snapshot(cls, other_space, filters=None):
+        cube = [(d, d.key(tuple()), len(d.levels)) \
+                for d in other_space._dimensions]
+        cls._db.snapshot(cls, other_space, cube, other_space._db_measures,
+                         filters=cls.build_filters(filters))
 
     @classmethod
     def get_dimension(cls, name):

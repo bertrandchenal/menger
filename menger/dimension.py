@@ -212,5 +212,5 @@ class Tree(Dimension):
         # Reset cache
         trigger('clear_cache')
 
-    def search(self, prefix):
-        return self.db.search(self, prefix)
+    def search(self, prefix, max_depth):
+        return self.db.search(self, prefix, max_depth)
