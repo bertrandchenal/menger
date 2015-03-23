@@ -355,10 +355,10 @@ def test_glob(session):
 def test_dice_filter(session):
     filters = [('date', [(2014, 1, 1)])]
     checks = [
-        {'coordinates': [],
+        {'coordinates': [('date', (2014, None, None))],
          'measures': ['total', 'count'],
          'filters': filters,
-         'values' : [((), (10.0, 2.0))]
+         'values' : [(((2014, 1, 1),), (10.0, 2.0))]
      },
     ]
     dice_check(checks)
