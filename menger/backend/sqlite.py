@@ -2,7 +2,7 @@ from itertools import chain, repeat
 import sqlite3
 
 from .sql import SqlBackend, LoadType
-
+from .. import dimension
 
 class SqliteBackend(SqlBackend):
 
@@ -20,6 +20,14 @@ class SqliteBackend(SqlBackend):
                 'CREATE TABLE IF NOT EXISTS "%s" ( '
                 'id INTEGER PRIMARY KEY, '
                 'name %s)' % (dim.table, dim.sql_type))
+
+            if isinstance(dim, dimension.Flat):
+                self.cursor.execute(
+                    'CREATE UNIQUE INDEX IF NOT EXISTS '\
+                    '%s_name_index ON "%s" (name)' % (
+                        dim.table, dim.table)
+                )
+                continue
 
             # Closure table for the dimension
             self.cursor.execute(
@@ -50,7 +58,7 @@ class SqliteBackend(SqlBackend):
 
         # Create index covering all dimensions
         self.cursor.execute(
-            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index on "%s" (%s)' % (
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index ON "%s" (%s)' % (
                 space._table,
                 space._table,
                 ' ,'.join(d.name for d in space._dimensions)
@@ -60,7 +68,7 @@ class SqliteBackend(SqlBackend):
         # Create one index per dimension
         for d in space._dimensions:
             self.cursor.execute(
-                'CREATE INDEX IF NOT EXISTS %s_%s_index on "%s" (%s)' % (
+                'CREATE INDEX IF NOT EXISTS %s_%s_index ON "%s" (%s)' % (
                     space._table,
                     d.name,
                     space._table,
@@ -98,11 +106,15 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute('ANALYZE')
         return nb_edit
 
-    def create_coordinate(self, dim, name, parent_id):
+    def create_coordinate(self, dim, name, parent_id=None):
         # Fill dimension table
         self.cursor.execute(
             'INSERT into %s (name) VALUES (?)' % dim.table, (name,))
         last_id = self.cursor.lastrowid
+
+        if isinstance(dim, dimension.Flat):
+            # Flat dimension, nothing more to do
+            return last_id
 
         # New coordinate share same parents than parent_id but at one
         # more depth
@@ -247,6 +259,10 @@ class SqliteBackend(SqlBackend):
                             (new_name, record_id)
         )
 
+    def get_names(self, dim):
+        stm = 'SELECT id, name from "%s"' % dim.table
+        return self.cursor.execute(stm)
+
     def get_children(self, dim, parent_id, depth=1):
         if parent_id is None:
             stm = 'SELECT name, id from "%s" where name is null' % dim.table
@@ -267,25 +283,72 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
+    def versioned_select(self, selects, space):
+        version_dim = space._versioned
+        other_dim = [
+            d.name for d in space._dimensions if d != version_dim]
+        with_select = ', '.join('space.' + d for d in other_dim)
+        cols_eq = ' AND '.join(
+            '%s.%s = latest.%s' % (space._table, d, d) for d in other_dim)
+
+        stm = 'WITH latest AS (' \
+              'SELECT '\
+                '%(with_select)s, %(vdim)s, max(dim_join.name) AS _version '\
+               'FROM %(space)s AS space ' \
+               'JOIN %(vdim_table)s as dim_join ON '\
+                '(dim_join.id = space.%(vdim)s) '\
+               'GROUP BY %(with_select)s '\
+              ') '\
+              'SELECT %(selects)s FROM %(space)s '\
+               'JOIN %(vdim_table)s as dim_join ON '\
+                '(dim_join.id = %(space)s.%(vdim)s) '\
+              'JOIN latest ON (%(cols_eq)s AND dim_join.name = _version)'
+        params = {
+            'with_select': with_select,
+            'vdim': version_dim.name,
+            'vdim_table': version_dim.table,
+            'space': space._table,
+            'selects': selects,
+            'cols_eq': cols_eq,
+        }
+        return stm % params
+
     def dice_query(self, space, cube, msrs, filters=None):
         select = []
         joins = []
         group_by = []
         params = {}
+        use_version_select = space._versioned is not None
 
         # Add dimensions to select
         for pos, (dim, key, depth) in enumerate(cube):
-            alias = 'join_%s' % pos
-            joins.append(self.child_join(space, dim, alias, filters))
-            f = '%s.parent' % alias
-            select.append(f)
-            group_by.append(f)
-            params[alias + '_key'] = key
-            params[alias + '_depth'] = depth
+            if space._versioned == dim:
+                use_version_select = False
+            if depth is None:
+                select.append(dim.name)
+                if key is not None:
+                    alias = 'join_%s' % pos
+                    joins.append(self.dim_join(space, dim, alias))
+                    params[alias + '_key'] = key
+
+                group_by.append(dim.name)
+            else:
+                alias = 'join_%s' % pos
+                joins.append(self.closure_join(space, dim, alias, filters))
+                f = '%s.parent' % alias
+                select.append(f)
+                group_by.append(f)
+                params[alias + '_key'] = key
+                params[alias + '_depth'] = depth
 
         # Add measures to select
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
-        stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
+
+        if use_version_select:
+            stm = self.versioned_select(', '.join(select), space)
+        else:
+            stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
+
 
         if joins:
             stm += ' ' + ' '.join(joins)
@@ -299,7 +362,21 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm, params)
         return self.cursor.fetchall()
 
-    def child_join(self, spc, dim, alias, filters):
+    def dim_join(self, spc, dim, alias):
+        join = 'JOIN %(dim_table)s AS %(alias)s ' \
+               'ON ('\
+                 '%(alias)s.id = "%(spc)s".%(dim)s ' \
+                 'AND %(alias)s.name = :%(alias)s_key)'
+        params = {
+            'dim_table': dim.table,
+            'dim': dim.name,
+            'spc': spc._table,
+            'alias': alias,
+        }
+
+        return join % params
+
+    def closure_join(self, spc, dim, alias, filters):
         # Build base condition to allow to group by parent
         subselect = 'SELECT child from "%(closure)s" ' \
                     ' WHERE ('\
@@ -310,7 +387,7 @@ class SqliteBackend(SqlBackend):
                         'alias': alias,
                     }
 
-        # Add eventual filter condition
+        # Add optional filter condition
         conds = []
         if filters:
             for filter_dim, keys in filters:
@@ -468,14 +545,21 @@ class SqliteBackend(SqlBackend):
                 yield col_name, 'measure', col_type, None
 
     def search(self, dim, substring, max_depth):
-        query = 'SELECT name, depth FROM %(dim)s ' \
-                'JOIN %(cls)s ON (parent = 1 and child = id) '\
-                'WHERE name like ? AND depth <= ?'\
-                'GROUP BY name, depth '\
-                'ORDER BY depth, name '\
-                % {
-                    'dim': dim.table,
-                    'cls': dim.closure_table,
-                }
-        self.cursor.execute(query, ('%' + substring + '%', max_depth))
-        return self.cursor
+        if max_depth is None:
+            query = 'SELECT name, null FROM %(dim)s ' \
+                    'WHERE name like ? '\
+                    'ORDER BY name'
+            args = ('%' + substring + '%',)
+        else:
+            query = 'SELECT name, depth FROM %(dim)s ' \
+                    'JOIN %(cls)s ON (parent = 1 and child = id) '\
+                    'WHERE name like ? AND depth <= ?'\
+                    'GROUP BY name, depth '\
+                    'ORDER BY depth, name '\
+                    % {
+                        'dim': dim.table,
+                        'cls': dim.closure_table,
+                    }
+            args = ('%' + substring + '%', max_depth)
+
+        return self.cursor.execute(query, args)

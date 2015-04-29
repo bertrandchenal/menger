@@ -7,24 +7,12 @@ class Measure(object):
     def format(self, value, fmt_type=None):
         return value
 
-    def aggregator(self):
-        total = 0
-        while True:
-            new_value = yield
-            if new_value is None:
-                yield total
-                return
-            total += new_value
-
-
 
 class Sum(Measure):
 
     def __init__(self, label, type=float):
         self.type = type
-        if self.type == str:
-            self.sql_type = 'varchar'
-        elif self.type == int:
+        if self.type == int:
             self.sql_type = 'integer'
         elif self.type == float:
             self.sql_type = 'float'
@@ -58,17 +46,6 @@ class Average(Computed):
         if count == 0:
             return 0
         return total / count
-
-    def aggregator(self):
-        cnt = 0
-        total = 0
-        while True:
-            new_value = yield
-            if new_value is None:
-                yield cnt if cnt == 0 else total / cnt
-                return
-            total += new_value
-            cnt += 1
 
 
 class Difference(Computed):

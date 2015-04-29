@@ -32,14 +32,11 @@ class Dimension(object):
         self.db = db
         table = (self.alias or self.name).lower()
         self.table = table + '_dim'
-        self.closure_table = table + '_closure'
         self.init_cache()
 
     def init_cache(self):
-        self.serialized = {}
-        self.id_cache = {}
+        self.key_cache = {}
         self.name_cache = {}
-        self.full_name_cache = {}
 
     def expand(self, values):
         return values
@@ -47,21 +44,19 @@ class Dimension(object):
     def aliases(self, values):
         return []
 
-class Tree(Dimension):
+    def unknow_coord(self, coord):
+        from . import UserError
+        raise UserError('"%s" on dimension "%s" is unknown' % (
+            '/'.join(map(str, coord)), self.name))
 
-    def __init__(self, label, levels, type=str, alias=None, ):
-        super(Tree, self).__init__(label, type=type)
-        self.levels = levels
-        self.depth = len(self.levels)
+    def coord(self, value=None):
+        raise NotImplementedError()
 
     def key(self, coord, create=False):
-        if len(coord) > self.depth:
-            return None
+        if coord in self.key_cache:
+            return self.key_cache[coord]
 
-        if coord in self.id_cache:
-            return self.id_cache[coord]
-
-        coord_id = self.get_id(coord)
+        coord_id = self._get_key(coord)
         if coord_id is not None:
             return coord_id
 
@@ -69,6 +64,39 @@ class Tree(Dimension):
             return None
 
         return self.create_id(coord)
+
+
+class Tree(Dimension):
+
+    '''A Tree dimension is defined by a list of level names, whose length
+    is the dimension depth. In a Tree dimension, coordinates are
+    tuples of strings like: ('grand parent', 'parent', 'child').
+
+    '''
+
+    def __init__(self, label, levels, type=str, alias=None, ):
+        super(Tree, self).__init__(label, type=type)
+        self.levels = levels
+        self.depth = len(self.levels)
+
+    def set_db(self, db):
+        super(Tree, self).set_db(db)
+        table = (self.alias or self.name).lower()
+        self.closure_table = table + '_closure'
+
+    def init_cache(self):
+        super(Tree, self).init_cache()
+        self.full_name_cache = {}
+
+    def coord(self, value=None):
+        if value is None:
+            return tuple()
+        if isinstance(value, tuple):
+            return value
+        if isinstance(value, list):
+            return tuple(value)
+
+        raise ValueError("Unexpected value %s" % value)
 
     def contains(self, coord):
         return self.key(coord) is not None
@@ -81,19 +109,21 @@ class Tree(Dimension):
         # Reset cache
         trigger('clear_cache')
 
-    def get_id(self, coord):
+    def _get_key(self, coord):
+        if len(coord) > self.depth:
+            return None
         parent = coord[:-1]
 
         if coord:
             key = self.key(parent)
             for name, cid in self.db.get_children(self, key):
                 name_tuple = parent + (name,)
-                self.id_cache[name_tuple] = cid
+                self.key_cache[name_tuple] = cid
         else:
             for name, cid in self.db.get_children(self, None):
-                self.id_cache[parent] = cid
+                self.key_cache[parent] = cid
 
-        return self.id_cache.get(coord)
+        return self.key_cache.get(coord)
 
     def get_name(self, coord_id):
         if coord_id in self.full_name_cache:
@@ -124,7 +154,7 @@ class Tree(Dimension):
             name = coord[-1]
 
         new_id = self.db.create_coordinate(self, name, parent)
-        self.id_cache[coord] = new_id
+        self.key_cache[coord] = new_id
         self.name_cache[new_id] = (name, parent)
         return new_id
 
@@ -172,11 +202,6 @@ class Tree(Dimension):
     def format(self, value, fmt_type=None, offset=None):
         return '/'.join(str(i) for i in islice(value, offset, None))
 
-    def unknow_coord(self, coord):
-        from . import UserError
-        raise UserError('"%s" on dimension "%s" is unknown' % (
-            '/'.join(map(str, coord)), self.name))
-
     def reparent(self, coord, new_parent_coord):
         # Late import to avoid loop
         from .space import iter_spaces
@@ -214,3 +239,51 @@ class Tree(Dimension):
 
     def search(self, prefix, max_depth):
         return self.db.search(self, prefix, max_depth)
+
+
+class Flat(Dimension):
+    '''In a flat dimension all coordinates are on the same level, hence a
+    coordinate is a simple string.
+
+    '''
+
+    def build_cache(self):
+        if not self.key_cache:
+            self.name_cache = dict(self.db.get_names(self))
+            self.key_cache = dict((v, k) for k, v in self.name_cache.items())
+
+    def _get_key(self, name, create=False):
+        self.build_cache()
+        return self.key_cache.get(name)
+
+    def get_name(self, key):
+        self.build_cache()
+        name = self.name_cache.get(key)
+        return name
+
+    def create_id(self, coord):
+        new_id = self.db.create_coordinate(self, coord)
+        self.key_cache[coord] = new_id
+        self.name_cache[new_id] = coord
+        return new_id
+
+    def rename(self, coord, new_name):
+        # Late import to avoid loop
+        from .space import iter_spaces
+
+        record_id = self.key(coord)
+        self.db.rename(self, record_id, new_name)
+
+    def coord(self, value):
+        if not value or not isinstance(value, str):
+            raise ValueError('Unexpected value %s' % value)
+        return value
+
+    def search(self, prefix):
+        return self.db.search(self, prefix)
+
+    def explode(self, coord):
+        return coord, None
+
+class Version(Flat):
+    pass

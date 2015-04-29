@@ -47,11 +47,18 @@ class MetaSpace(type):
 
         dimensions = []
         measures = []
+        versioned = None
         for k, v in attrs.items():
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
                 dimensions.append(v)
                 v.name = k
+            if isinstance(v, dimension.Version):
+                if versioned is not None:
+                    raise Exception('Maximum one version dimension is '
+                                    'supported per space')
+                else:
+                    versioned = v
 
             # Collect measures
             elif isinstance(v, measure.Measure):
@@ -66,6 +73,7 @@ class MetaSpace(type):
                 v.format = format_fn
 
         attrs['_dimensions'] = dimensions
+        attrs['_versioned'] = versioned
         attrs['_measures'] = measures
         attrs['_db_measures'] = [
             m for m in measures if isinstance(m, measure.Sum)
@@ -87,7 +95,7 @@ class Space(metaclass=MetaSpace):
     @classmethod
     def key(cls, point, create=False):
         key = tuple(
-            dim.key(point.get(name, tuple()), create=create)
+            dim.key(dim.coord(point.get(name)), create=create)
             for dim in cls._dimensions)
         if not create:
             # When create is false one of the coord may be None
@@ -112,7 +120,7 @@ class Space(metaclass=MetaSpace):
                 continue
             values = tuple(point[m.name] for m in cls._db_measures)
             coords = tuple(
-                d.key(tuple(point[d.name]), create=True) \
+                d.key(d.coord((point[d.name])), create=True) \
                 for d in cls._dimensions
             )
             yield coords, values
@@ -268,7 +276,7 @@ class Space(metaclass=MetaSpace):
 
     @classmethod
     def snapshot(cls, other_space, filters=None):
-        cube = [(d, d.key(tuple()), len(d.levels)) \
+        cube = [(d, d.key(d.coord()), len(d.levels)) \
                 for d in other_space._dimensions]
         cls._db.snapshot(cls, other_space, cube, other_space._db_measures,
                          filters=cls.build_filters(filters))
