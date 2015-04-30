@@ -74,8 +74,8 @@ class Tree(Dimension):
 
     '''
 
-    def __init__(self, label, levels, type=str, alias=None, ):
-        super(Tree, self).__init__(label, type=type)
+    def __init__(self, label, levels, type=str, alias=None):
+        super(Tree, self).__init__(label, type=type, alias=alias)
         self.levels = levels
         self.depth = len(self.levels)
 
@@ -241,49 +241,64 @@ class Tree(Dimension):
         return self.db.search(self, prefix, max_depth)
 
 
-class Flat(Dimension):
-    '''In a flat dimension all coordinates are on the same level, hence a
-    coordinate is a simple string.
+# class Flat(Dimension):
+#     '''In a flat dimension all coordinates are on the same level, hence a
+#     coordinate is a simple string.
 
-    '''
+#     '''
 
-    def build_cache(self):
-        if not self.key_cache:
-            self.name_cache = dict(self.db.get_names(self))
-            self.key_cache = dict((v, k) for k, v in self.name_cache.items())
+#     def build_cache(self):
+#         if not self.key_cache:
+#             self.name_cache = dict(self.db.get_names(self))
+#             self.key_cache = dict((v, k) for k, v in self.name_cache.items())
 
-    def _get_key(self, name, create=False):
-        self.build_cache()
-        return self.key_cache.get(name)
+#     def _get_key(self, name, create=False):
+#         self.build_cache()
+#         return self.key_cache.get(name)
 
-    def get_name(self, key):
-        self.build_cache()
-        name = self.name_cache.get(key)
-        return name
+#     def get_name(self, key):
+#         self.build_cache()
+#         name = self.name_cache.get(key)
+#         return name
 
-    def create_id(self, coord):
-        new_id = self.db.create_coordinate(self, coord)
-        self.key_cache[coord] = new_id
-        self.name_cache[new_id] = coord
-        return new_id
+#     def create_id(self, coord):
+#         new_id = self.db.create_coordinate(self, coord)
+#         self.key_cache[coord] = new_id
+#         self.name_cache[new_id] = coord
+#         return new_id
 
-    def rename(self, coord, new_name):
-        # Late import to avoid loop
-        from .space import iter_spaces
+#     def rename(self, coord, new_name):
+#         # Late import to avoid loop
+#         record_id = self.key(coord)
+#         self.db.rename(self, record_id, new_name)
 
-        record_id = self.key(coord)
-        self.db.rename(self, record_id, new_name)
+#     def coord(self, value):
+#         if not value or not isinstance(value, str):
+#             raise ValueError('Unexpected value %s' % value)
+#         return value
 
-    def coord(self, value):
-        if not value or not isinstance(value, str):
-            raise ValueError('Unexpected value %s' % value)
-        return value
+#     def drill(self, values):
+#         key = self.key(values)
+#         if key is None:
+#             return
+#         children = self.db.get_children(self, key)
+#         for name, _ in sorted(children):
+#             yield name
 
-    def search(self, prefix):
-        return self.db.search(self, prefix)
+#     def search(self, prefix):
+#         return self.db.search(self, prefix)
 
-    def explode(self, coord):
-        return coord, None
+#     def explode(self, coord):
+#         return coord, None
 
-class Version(Flat):
-    pass
+class Version(Tree):
+
+    def __init__(self, label, type=str, alias=None):
+        levels = [label]
+        super(Version, self).__init__(label, levels=levels, type=type,
+                                      alias=alias)
+        if self.depth > 1:
+            raise ValueError('Version dimension support only on level')
+
+    def max(self):
+        return (max(self.drill(tuple())),)

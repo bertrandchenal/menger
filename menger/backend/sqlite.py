@@ -21,14 +21,6 @@ class SqliteBackend(SqlBackend):
                 'id INTEGER PRIMARY KEY, '
                 'name %s)' % (dim.table, dim.sql_type))
 
-            if isinstance(dim, dimension.Flat):
-                self.cursor.execute(
-                    'CREATE UNIQUE INDEX IF NOT EXISTS '\
-                    '%s_name_index ON "%s" (name)' % (
-                        dim.table, dim.table)
-                )
-                continue
-
             # Closure table for the dimension
             self.cursor.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ('
@@ -61,7 +53,7 @@ class SqliteBackend(SqlBackend):
             'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index ON "%s" (%s)' % (
                 space._table,
                 space._table,
-                ' ,'.join(d.name for d in space._dimensions)
+                ', '.join(d.name for d in space._dimensions)
                 )
             )
 
@@ -111,10 +103,6 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(
             'INSERT into %s (name) VALUES (?)' % dim.table, (name,))
         last_id = self.cursor.lastrowid
-
-        if isinstance(dim, dimension.Flat):
-            # Flat dimension, nothing more to do
-            return last_id
 
         # New coordinate share same parents than parent_id but at one
         # more depth
@@ -259,10 +247,6 @@ class SqliteBackend(SqlBackend):
                             (new_name, record_id)
         )
 
-    def get_names(self, dim):
-        stm = 'SELECT id, name from "%s"' % dim.table
-        return self.cursor.execute(stm)
-
     def get_children(self, dim, parent_id, depth=1):
         if parent_id is None:
             stm = 'SELECT name, id from "%s" where name is null' % dim.table
@@ -297,6 +281,7 @@ class SqliteBackend(SqlBackend):
                'FROM %(space)s AS space ' \
                'JOIN %(vdim_table)s as dim_join ON '\
                 '(dim_join.id = space.%(vdim)s) '\
+               'WHERE dim_join.name is not null '\
                'GROUP BY %(with_select)s '\
               ') '\
               'SELECT %(selects)s FROM %(space)s '\
@@ -313,7 +298,7 @@ class SqliteBackend(SqlBackend):
         }
         return stm % params
 
-    def dice_query(self, space, cube, msrs, filters=None):
+    def dice_query(self, space, cube, msrs, filters=None, defaults=None):
         select = []
         joins = []
         group_by = []
@@ -324,14 +309,9 @@ class SqliteBackend(SqlBackend):
         for pos, (dim, key, depth) in enumerate(cube):
             if space._versioned == dim:
                 use_version_select = False
-            if depth is None:
-                select.append(dim.name)
-                if key is not None:
-                    alias = 'join_%s' % pos
-                    joins.append(self.dim_join(space, dim, alias))
-                    params[alias + '_key'] = key
-
-                group_by.append(dim.name)
+            if defaults and dim.name in defaults:
+                v = defaults[dim.name]
+                select.append('%s AS %s' % (v, dim.name))
             else:
                 alias = 'join_%s' % pos
                 joins.append(self.closure_join(space, dim, alias, filters))
@@ -354,7 +334,7 @@ class SqliteBackend(SqlBackend):
             stm += ' ' + ' '.join(joins)
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
-
+        print(stm, params)
         return stm, params
 
     def dice(self, space, cube, msrs, filters=[]):
@@ -484,8 +464,6 @@ class SqliteBackend(SqlBackend):
         return self.cursor.fetchall()
 
     def build_filter_clause(self, filters):
-        if not filters:
-            return
         where = []
         for dim, keys in filters:
             conds = (' parent = %s ' % key for key in keys)
@@ -498,16 +476,18 @@ class SqliteBackend(SqlBackend):
             where.append(subsel)
         return ' AND '.join(where)
 
-    def snapshot(self, space, other_space, cube, msrs, filters=None):
+    def snapshot(self, space, other_space, cube, msrs, space_filters,
+                 other_filters, defaults):
         # Delete existing data
         query = 'DELETE FROM %s' % other_space._table
-        filter_clause = self.build_filter_clause(filters)
-        if filter_clause:
+        if other_filters:
+            filter_clause = self.build_filter_clause(other_filters)
             query = query + ' WHERE ' + filter_clause
         self.cursor.execute(query)
 
         # Copy into other_space
-        dice_stm , dice_params = self.dice_query(space, cube, msrs, filters)
+        dice_stm , dice_params = self.dice_query(
+            space, cube, msrs, space_filters, defaults)
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
         self.cursor.execute(stm, dice_params)

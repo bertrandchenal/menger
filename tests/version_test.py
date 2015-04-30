@@ -6,28 +6,28 @@ from menger import dimension, Space, measure, connect
 from base_test import URI
 
 DATA = [
-    {'version': '2015-01',
+    {'version': ['2015-01'],
      'place': ['EU', 'BE', 'BRU'],
      'total': 2},
-    {'version': '2015-02',
+    {'version': ['2015-02'],
      'place': ['EU', 'BE', 'BRU'],
      'total': 20},
-    {'version': '2015-01',
+    {'version': ['2015-01'],
      'place': ['EU', 'BE', 'CRL'],
      'total': 4},
-    {'version': '2015-02',
+    {'version': ['2015-02'],
      'place': ['EU', 'BE', 'CRL'],
      'total': 40},
-    {'version': '2015-01',
+    {'version': ['2015-01'],
      'place': ['EU', 'FR', 'ORY'],
      'total': 8},
-    {'version': '2015-02',
+    {'version': ['2015-02'],
      'place': ['EU', 'FR', 'ORY'],
      'total': 80},
-    {'version': '2015-01',
+    {'version': ['2015-01'],
      'place': ['USA', 'NYC', 'JFK'],
      'total': 16},
-    {'version': '2015-02',
+    {'version': ['2015-02'],
      'place': ['USA', 'NYC', 'JFK'],
      'total': 160},
 ]
@@ -57,8 +57,8 @@ def test_version(session):
     res = sorted(VersionCube.dice(coordinates=[('place', (None,))]))
     assert res == [((('EU',),), (140.0,)), ((('USA',),), (160.0,))]
 
-    res = sorted(VersionCube.dice(coordinates=[('version', None)]))
-    assert res == [(('2015-01',), (30.0,)), (('2015-02',), (300.0,))]
+    res = sorted(VersionCube.dice(coordinates=[('version', (None,))]))
+    assert res == [((('2015-01',),), (30.0,)), ((('2015-02',),), (300.0,))]
 
-    res = sorted(VersionCube.dice(coordinates=[('version', '2015-01')]))
-    assert res == [(('2015-01',), (30.0,))]
+    res = sorted(VersionCube.dice(coordinates=[('version', ('2015-01',))]))
+    assert res == [((('2015-01',),), (30.0,))]

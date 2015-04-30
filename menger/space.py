@@ -275,11 +275,32 @@ class Space(metaclass=MetaSpace):
             fpos, fval = next(fn_vals, (None, None))
 
     @classmethod
-    def snapshot(cls, other_space, filters=None):
-        cube = [(d, d.key(d.coord()), len(d.levels)) \
-                for d in other_space._dimensions]
+    def snapshot(cls, other_space, filters=None, defaults=None):
+        cube = []
+        current_dim = [d.name for d in cls._dimensions]
+        filters = filters or []
+        defaults = defaults or {}
+
+        # Build filters
+        space_filters = cls.build_filters(filters)
+        if defaults:
+            for k, v in defaults.items():
+                filters.append((k, [v]))
+            other_filters = other_space.build_filters(filters)
+        else:
+            other_filters = space_filters
+
+        # Compute default keys and build cube definition
+        for d in other_space._dimensions:
+            if d.name in defaults:
+                defaults[d.name] = d.key(defaults[d.name])
+            cube.append((d, d.key(d.coord()), len(d.levels)))
+
         cls._db.snapshot(cls, other_space, cube, other_space._db_measures,
-                         filters=cls.build_filters(filters))
+                         space_filters=space_filters,
+                         other_filters=other_filters,
+                         defaults=defaults,
+        )
 
     @classmethod
     def get_dimension(cls, name):
