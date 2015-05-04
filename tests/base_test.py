@@ -157,13 +157,22 @@ def test_dice_filter(session):
     ]
     dice_check(checks)
 
+    checks = [
+        {'coordinates': [],
+         'measures': ['total', 'count'],
+         'filters': filters,
+         'values' : [((tuple()), (10.0, 2.0))]
+     },
+    ]
+    dice_check(checks)
+
 
 def test_glob_filter(session):
     filters = [[(2014, 1, 1)]]
     res = Cube.date.glob((None, 1, None), filters=filters)
     assert res == [(2014, 1, 1)]
 
-    # (2014, 1, 1) OR(2014, 1, 2)
+    # (2014, 1, 1) OR (2014, 1, 2)
     filters = [[(2014, 1, 1), (2014, 1, 2)]]
     res = Cube.date.glob((None, 1, None), filters=filters)
     assert res == [(2014, 1, 1), (2014, 1, 2)]
