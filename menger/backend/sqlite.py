@@ -4,6 +4,12 @@ import sqlite3
 from .sql import SqlBackend, LoadType
 from .. import dimension
 
+
+def format_query(stm, params):
+    for k, v in params.items():
+        stm = stm.replace(':'+k, str(v))
+    return stm
+
 class SqliteBackend(SqlBackend):
 
     def __init__(self, path):
