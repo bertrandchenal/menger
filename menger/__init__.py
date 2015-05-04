@@ -23,5 +23,10 @@ def connect(uri, rollback_on_close=False):
             msr.set_db(db)
 
         db.register(cls)
-    yield
-    db.close(rollback=rollback_on_close)
+    try:
+        yield
+    except:
+        db.close(rollback=True)
+        raise
+    else:
+        db.close(rollback=rollback_on_close)
