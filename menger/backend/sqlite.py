@@ -63,14 +63,12 @@ class SqliteBackend(SqlBackend):
                 )
             )
 
-        # Create one index per dimension
+        # Clean old (weak) indexes
         for d in space._dimensions:
             self.cursor.execute(
-                'CREATE INDEX IF NOT EXISTS %s_%s_index ON "%s" (%s)' % (
+                'DROP INDEX IF EXISTS %s_%s_index' % (
                     space._table,
                     d.name,
-                    space._table,
-                    d.name
                     )
                 )
 
