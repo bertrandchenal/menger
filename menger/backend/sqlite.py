@@ -307,6 +307,7 @@ class SqliteBackend(SqlBackend):
         joins = []
         group_by = []
         params = {}
+        filtered = set()
         use_version_select = space._versioned is not None
 
         # Add dimensions to select
@@ -318,12 +319,17 @@ class SqliteBackend(SqlBackend):
                 select.append('%s AS %s' % (v, dim.name))
             else:
                 alias = 'join_%s' % pos
-                joins.append(self.closure_join(space, dim, alias, filters))
+                joins.append(self.closure_join(space, dim, alias, None))
+                filtered.add(dim.name)
                 f = '%s.parent' % alias
                 select.append(f)
                 group_by.append(f)
                 params[alias + '_key'] = key
                 params[alias + '_depth'] = depth
+
+        if filters:
+            filters = [(dim, keys) for dim, keys in filters \
+                       if dim.name not in filtered]
 
         # Add measures to select
         select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
@@ -333,12 +339,16 @@ class SqliteBackend(SqlBackend):
         else:
             stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
 
-
         if joins:
             stm += ' ' + ' '.join(joins)
+
+        if filters:
+            filter_clause = self.build_filter_clause(space, filters)
+            stm += ' WHERE ' + filter_clause
+
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
-        print(stm, params)
+
         return stm, params
 
     def dice(self, space, cube, msrs, filters=[]):
@@ -467,12 +477,13 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(query % format_args, query_args)
         return self.cursor.fetchall()
 
-    def build_filter_clause(self, filters):
+    def build_filter_clause(self, space, filters):
         where = []
         for dim, keys in filters:
             conds = (' parent = %s ' % key for key in keys)
-            subsel = '%(dim)s in (SELECT child FROM %(closure)s '\
+            subsel = '%(spc)s.%(dim)s in (SELECT child FROM %(closure)s '\
                    'WHERE %(cond)s )' % {
+                       'spc': space._table,
                        'dim': dim.name,
                        'closure': dim.closure_table,
                        'cond': ' OR '.join(conds)
@@ -485,7 +496,7 @@ class SqliteBackend(SqlBackend):
         # Delete existing data
         query = 'DELETE FROM %s' % other_space._table
         if other_filters:
-            filter_clause = self.build_filter_clause(other_filters)
+            filter_clause = self.build_filter_clause(other_space, other_filters)
             query = query + ' WHERE ' + filter_clause
         self.cursor.execute(query)
 
@@ -494,6 +505,7 @@ class SqliteBackend(SqlBackend):
             space, cube, msrs, space_filters, defaults)
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
+
         self.cursor.execute(stm, dice_params)
 
     def close(self, rollback=False):
