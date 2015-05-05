@@ -53,12 +53,12 @@ class MetaSpace(type):
             if isinstance(v, dimension.Dimension):
                 dimensions.append(v)
                 v.name = k
-            if isinstance(v, dimension.Version):
-                if versioned is not None:
-                    raise Exception('Maximum one version dimension is '
-                                    'supported per space')
-                else:
-                    versioned = v
+                if isinstance(v, dimension.Version):
+                    if versioned is not None:
+                        raise Exception('Maximum one version dimension is '
+                                        'supported per space')
+                    else:
+                        versioned = v
 
             # Collect measures
             elif isinstance(v, measure.Measure):
