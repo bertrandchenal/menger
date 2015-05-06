@@ -15,6 +15,7 @@ class SqlBackend(BaseBackend):
         self.get_stm = {}
         self.insert_stm = {}
         self.update_stm = {}
+        self.delete_stm = {}
 
     def load(self, space, keys_vals, load_type=None):
         nb_edit = 0
@@ -38,9 +39,16 @@ class SqlBackend(BaseBackend):
         self.cursor.execute(self.get_stm[space._name], key)
         return self.cursor.fetchone()
 
-    def update(self, space, k, v):
-        self.cursor.execute(self.update_stm[space._name], v + k)
+    def update(self, space, key, vals):
+        if any(vals):
+            self.cursor.execute(self.update_stm[space._name], vals + key)
+        else:
+            # Delete row of all values are zero
+            self.cursor.execute(self.delete_stm[space._name], key)
 
-    def insert(self, space, k, v):
-        self.cursor.execute(self.insert_stm[space._name], k + v)
+    def insert(self, space, key, vals):
+        if not any(vals):
+            # Skip if all values are zero
+            return
+        self.cursor.execute(self.insert_stm[space._name], key + vals)
 

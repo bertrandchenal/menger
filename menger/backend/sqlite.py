@@ -95,6 +95,11 @@ class SqliteBackend(SqlBackend):
         self.insert_stm[space._name] = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
             space._table, field_stm, val_stm)
 
+        #delete_stm
+        cond_stm = ' AND '.join('%s = ?' % d for d in dimensions)
+        self.delete_stm[space._name] = 'DELETE FROM "%s" WHERE %s' % (
+            space._table, cond_stm)
+
     def load(self, space, keys_vals, load_type=None):
         # TODO check for equivalent in postgresql
         nb_edit = super(SqliteBackend, self).load(
