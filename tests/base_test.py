@@ -166,6 +166,15 @@ def test_dice_filter(session):
     ]
     dice_check(checks)
 
+    checks = [
+        {'coordinates': [('date', (2014,))],
+         'measures': ['total', 'count'],
+         'filters': filters,
+         'values' : [(((2014,),), (10.0, 2.0))]
+     },
+    ]
+    dice_check(checks)
+
 
 def test_glob_filter(session):
     filters = [[(2014, 1, 1)]]
