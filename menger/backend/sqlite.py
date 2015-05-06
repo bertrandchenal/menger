@@ -2,7 +2,6 @@ from itertools import chain, repeat
 import sqlite3
 
 from .sql import SqlBackend, LoadType
-from .. import dimension
 
 
 def format_query(stm, params):
@@ -276,84 +275,52 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def versioned_select(self, selects, space):
-        version_dim = space._versioned
-        other_dim = [
-            d.name for d in space._dimensions if d != version_dim]
-        with_select = ', '.join('space.' + d for d in other_dim)
-        cols_eq = ' AND '.join(
-            '%s.%s = latest.%s' % (space._table, d, d) for d in other_dim)
-
-        stm = 'WITH latest AS (' \
-              'SELECT '\
-                '%(with_select)s, %(vdim)s, max(dim_join.name) AS _version '\
-               'FROM %(space)s AS space ' \
-               'JOIN %(vdim_table)s as dim_join ON '\
-                '(dim_join.id = space.%(vdim)s) '\
-               'WHERE dim_join.name is not null '\
-               'GROUP BY %(with_select)s '\
-              ') '\
-              'SELECT %(selects)s FROM %(space)s '\
-               'JOIN %(vdim_table)s as dim_join ON '\
-                '(dim_join.id = %(space)s.%(vdim)s) '\
-              'JOIN latest ON (%(cols_eq)s AND dim_join.name = _version)'
-        params = {
-            'with_select': with_select,
-            'vdim': version_dim.name,
-            'vdim_table': version_dim.table,
-            'space': space._table,
-            'selects': selects,
-            'cols_eq': cols_eq,
-        }
-        return stm % params
-
     def dice_query(self, space, cube, msrs, filters=None, defaults=None):
+        filters = filters or []
+        defaults = defaults or {}
         select = []
         joins = []
         group_by = []
         params = {}
-        filtered = set()
-        use_version_select = space._versioned is not None
 
         # Add dimensions to select
         for pos, (dim, key, depth) in enumerate(cube):
-            if space._versioned == dim:
-                use_version_select = False
-            if defaults and dim.name in defaults:
+            if dim.name in defaults:
                 v = defaults[dim.name]
                 select.append('%s AS %s' % (v, dim.name))
             else:
                 alias = 'join_%s' % pos
-                joins.append(self.closure_join(space, dim, alias, None))
-                filtered.add(dim.name)
+                joins.append(self.closure_join(space, dim, alias))
                 f = '%s.parent' % alias
                 select.append(f)
                 group_by.append(f)
                 params[alias + '_key'] = key
                 params[alias + '_depth'] = depth
 
-        if filters:
-            filters = [(dim, keys) for dim, keys in filters \
-                       if dim.name not in filtered]
+        vdim = space._versioned
+        if vdim and vdim.name not in (dim.name for dim, *_ in cube):
+            mkey = vdim.max_key()
+            if mkey is not None:
+                filters.append((vdim, [mkey]))
 
-        # Add measures to select
-        select.extend('coalesce(sum(%s), 0)' % m.name for m in msrs)
-
-        if use_version_select:
-            stm = self.versioned_select(', '.join(select), space)
-        else:
-            stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
-
+        # Base query
+        select.extend('sum(%s)' % m.name for m in msrs)
+        stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
         if joins:
             stm += ' ' + ' '.join(joins)
 
+        # Where clause
+        zero_cond = ' OR '.join('%s != 0' % m.name for m in msrs)
+        where = [zero_cond]
         if filters:
-            filter_clause = self.build_filter_clause(space, filters)
-            stm += ' WHERE ' + filter_clause
+            filter_stm, filter_params = self.build_filter_clause(space, filters)
+            params.update(filter_params)
+            where.append(filter_stm)
+        stm += ' WHERE ' + ' AND '.join('(%s)' % w for w in where)
 
+        # Group clause
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
-
         return stm, params
 
     def dice(self, space, cube, msrs, filters=[]):
@@ -361,21 +328,7 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm, params)
         return self.cursor.fetchall()
 
-    def dim_join(self, spc, dim, alias):
-        join = 'JOIN %(dim_table)s AS %(alias)s ' \
-               'ON ('\
-                 '%(alias)s.id = "%(spc)s".%(dim)s ' \
-                 'AND %(alias)s.name = :%(alias)s_key)'
-        params = {
-            'dim_table': dim.table,
-            'dim': dim.name,
-            'spc': spc._table,
-            'alias': alias,
-        }
-
-        return join % params
-
-    def closure_join(self, spc, dim, alias, filters):
+    def closure_join(self, spc, dim, alias):
         # Build base condition to allow to group by parent
         subselect = 'SELECT child from "%(closure)s" ' \
                     ' WHERE ('\
@@ -386,31 +339,11 @@ class SqliteBackend(SqlBackend):
                         'alias': alias,
                     }
 
-        # Add optional filter condition
-        conds = []
-        if filters:
-            for filter_dim, keys in filters:
-                if filter_dim.name != dim.name:
-                    continue
-                conds.append(' OR '.join(
-                    ' parent = %s' %  key for key in keys
-                ))
-        if conds:
-            filter_cond = ' AND %(alias)s.parent IN ('\
-                          'SELECT CHILD FROM %(closure)s '\
-                          'WHERE ' + \
-                          ' AND '.join('(%s)' % c for c in conds) +\
-                          ')'
-        else:
-            filter_cond = ''
-
         # Build join clause
         join = 'JOIN %(closure)s AS %(alias)s ' \
                'ON ('\
                  '%(alias)s.child = "%(spc)s".%(dim)s ' \
-                 'AND %(alias)s.parent IN (%(subselect)s) ' +\
-                 filter_cond +\
-               ')'
+                 'AND %(alias)s.parent IN (%(subselect)s))'
         params = {
             'closure': dim.closure_table,
             'spc': spc._table,
@@ -484,8 +417,17 @@ class SqliteBackend(SqlBackend):
 
     def build_filter_clause(self, space, filters):
         where = []
+        cnt = 0
+        params = {}
         for dim, keys in filters:
-            conds = (' parent = %s ' % key for key in keys)
+            cnt += 1
+            conds = ('parent = :filter_%s_%s' % (cnt, pos) \
+                     for pos, _ in enumerate(keys))
+            params.update(
+                ('filter_%s_%s' % (cnt, pos), key) \
+                for pos, key in enumerate(keys)
+            )
+
             subsel = '%(spc)s.%(dim)s in (SELECT child FROM %(closure)s '\
                    'WHERE %(cond)s )' % {
                        'spc': space._table,
@@ -494,7 +436,7 @@ class SqliteBackend(SqlBackend):
                        'cond': ' OR '.join(conds)
                    }
             where.append(subsel)
-        return ' AND '.join(where)
+        return ' AND '.join(where), params
 
     def snapshot(self, space, other_space, cube, msrs, space_filters,
                  other_filters, defaults):
@@ -502,15 +444,18 @@ class SqliteBackend(SqlBackend):
         query = 'DELETE FROM %s' % other_space._table
         if other_filters:
             filter_clause = self.build_filter_clause(other_space, other_filters)
-            query = query + ' WHERE ' + filter_clause
-        self.cursor.execute(query)
+            filter_stm, params = filter_clause
+            query = query + ' WHERE ' + filter_stm
+        else:
+            params = {}
+
+        self.cursor.execute(query, params)
 
         # Copy into other_space
         dice_stm , dice_params = self.dice_query(
             space, cube, msrs, space_filters, defaults)
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
-
         self.cursor.execute(stm, dice_params)
 
     def close(self, rollback=False):
