@@ -38,10 +38,12 @@ def session():
     if URI != ':memory:' and os.path.exists(URI):
         os.unlink(URI)
 
-    with connect(URI):
-        Cube.load(DATA)
-        yield 'session'
-
+    with connect(URI) as db:
+        try:
+            Cube.load(DATA)
+            yield 'session'
+        except:
+            raise
 
 def drill_check(to_check):
     for check in to_check:
@@ -121,8 +123,6 @@ def test_drill(session):
             'dimension': 'date',
         },
     ]
-
-
 
     drill_check(checks)
 

@@ -2,18 +2,31 @@ from collections import defaultdict
 from itertools import islice, takewhile
 
 from .event import register, trigger
+from . import ctx
 
 not_none = lambda x: x is not None
 head = lambda x: tuple(takewhile(not_none, x))
+
+KEY_CACHE = {}
+NAME_CACHE = {}
+FULL_NAME_CACHE = {}
+
+def clear_cache():
+    global KEY_CACHE, NAME_CACHE, FULL_NAME_CACHE
+    KEY_CACHE = {}
+    NAME_CACHE = {}
+    FULL_NAME_CACHE = {}
+register('clear_cache', clear_cache)
+
 
 class Dimension(object):
 
     def __init__(self, label, type=str, alias=None):
         self.label = label
         self.type = type
-        self.db = None
         self.name = None
         self.alias = alias
+        self.table = None
 
         if self.type == str:
             self.sql_type = 'varchar'
@@ -25,24 +38,25 @@ class Dimension(object):
             raise Exception('Type %s not supported for dimension %s' % (
                 type, label
             ))
-        self.init_cache()
-        register('clear_cache', self.init_cache)
 
-    def set_db(self, db):
-        self.db = db
+    def set_name(self, name):
+        self.name = name
         table = (self.alias or self.name).lower()
         self.table = table + '_dim'
-        self.init_cache()
-
-    def init_cache(self):
-        self.key_cache = {}
-        self.name_cache = {}
 
     def expand(self, values):
         return values
 
     def aliases(self, values):
         return []
+
+    @property
+    def key_cache(self):
+        return KEY_CACHE.setdefault(self.name, {})
+
+    @property
+    def name_cache(self):
+        return NAME_CACHE.setdefault(self.name, {})
 
     def unknow_coord(self, coord):
         from . import UserError
@@ -79,14 +93,14 @@ class Tree(Dimension):
         self.levels = levels
         self.depth = len(self.levels)
 
-    def set_db(self, db):
-        super(Tree, self).set_db(db)
+    def set_name(self, name):
+        super(Tree, self).set_name(name)
         table = (self.alias or self.name).lower()
         self.closure_table = table + '_closure'
 
-    def init_cache(self):
-        super(Tree, self).init_cache()
-        self.full_name_cache = {}
+    @property
+    def full_name_cache(self):
+        return FULL_NAME_CACHE.setdefault(self.name, {})
 
     def coord(self, value=None):
         if value is None:
@@ -105,7 +119,7 @@ class Tree(Dimension):
         coord_id = self.key(coord)
         if not coord_id:
             return
-        self.db.delete_coordinate(self, coord_id)
+        ctx.db.delete_coordinate(self, coord_id)
         # Reset cache
         trigger('clear_cache')
 
@@ -116,11 +130,11 @@ class Tree(Dimension):
 
         if coord:
             key = self.key(parent)
-            for name, cid in self.db.get_children(self, key):
+            for name, cid in ctx.db.get_children(self, key):
                 name_tuple = parent + (name,)
                 self.key_cache[name_tuple] = cid
         else:
-            for name, cid in self.db.get_children(self, None):
+            for name, cid in ctx.db.get_children(self, None):
                 self.key_cache[parent] = cid
 
         return self.key_cache.get(coord)
@@ -130,7 +144,7 @@ class Tree(Dimension):
             return self.full_name_cache[coord_id]
 
         if coord_id not in self.name_cache:
-            for id, name, parent in self.db.get_parents(self):
+            for id, name, parent in ctx.db.get_parents(self):
                 self.name_cache[id] = (name, parent)
 
         name, parent = self.name_cache.get(coord_id, (None, None))
@@ -153,7 +167,7 @@ class Tree(Dimension):
             parent = self.key(coord[:-1], create=True)
             name = coord[-1]
 
-        new_id = self.db.create_coordinate(self, name, parent)
+        new_id = ctx.db.create_coordinate(self, name, parent)
         self.key_cache[coord] = new_id
         self.name_cache[new_id] = (name, parent)
         return new_id
@@ -162,7 +176,7 @@ class Tree(Dimension):
         key = self.key(values)
         if key is None:
             return
-        children = self.db.get_children(self, key)
+        children = ctx.db.get_children(self, key)
         for name, _ in sorted(children):
             yield name
 
@@ -177,7 +191,7 @@ class Tree(Dimension):
         for values in filters:
             key_depths.append([(self.key(v), len(v)) for v in values])
 
-        res = self.db.glob(self, self.key(h), len(h), tail, key_depths)
+        res = ctx.db.glob(self, self.key(h), len(h), tail, key_depths)
         return [self.get_name(child_id) for child_id, in res]
 
     def explode(self, coord):
@@ -212,13 +226,13 @@ class Tree(Dimension):
 
         record_id = self.key(coord)
         new_parent_id = self.key(new_parent_coord)
-        self.db.reparent(self, record_id, new_parent_id)
+        ctx.db.reparent(self, record_id, new_parent_id)
 
         # Merge any resulting duplicate
-        self.db.merge(self, new_parent_id, iter_spaces())
+        ctx.db.merge(self, new_parent_id, iter_spaces())
 
         # Prune old parent
-        self.db.prune(self, self.key(curr_parent))
+        ctx.db.prune(self, self.key(curr_parent))
 
         # Reset cache
         trigger('clear_cache')
@@ -228,17 +242,17 @@ class Tree(Dimension):
         from .space import iter_spaces
 
         record_id = self.key(coord)
-        self.db.rename(self, record_id, new_name)
+        ctx.db.rename(self, record_id, new_name)
 
         # Merge any resulting duplicate
         parent_id = self.key(coord[:-1])
-        self.db.merge(self, parent_id, iter_spaces())
+        ctx.db.merge(self, parent_id, iter_spaces())
 
         # Reset cache
         trigger('clear_cache')
 
     def search(self, prefix, max_depth):
-        return self.db.search(self, prefix, max_depth)
+        return ctx.db.search(self, prefix, max_depth)
 
 
 class Version(Tree):

@@ -8,6 +8,7 @@ from . import backend
 from . import dimension
 from . import measure
 from .event import trigger
+from . import ctx
 
 SPACES = {}
 SPACE_LIST = []
@@ -52,7 +53,7 @@ class MetaSpace(type):
             # Collect dimensions
             if isinstance(v, dimension.Dimension):
                 dimensions.append(v)
-                v.name = k
+                v.set_name(k)
                 if isinstance(v, dimension.Version):
                     if versioned is not None:
                         raise Exception('Maximum one version dimension is '
@@ -89,9 +90,6 @@ class MetaSpace(type):
 
 class Space(metaclass=MetaSpace):
 
-    _db = None
-    _all = []
-
     @classmethod
     def key(cls, point, create=False):
         key = tuple(
@@ -105,7 +103,7 @@ class Space(metaclass=MetaSpace):
 
     @classmethod
     def load(cls, points, filters=None, load_type=None):
-        nb_edit = cls._db.load(cls, cls.convert(points, filters=filters),
+        nb_edit = ctx.db.load(cls, cls.convert(points, filters=filters),
                                load_type=load_type)
         trigger('clear_cache')
         return nb_edit
@@ -223,7 +221,7 @@ class Space(metaclass=MetaSpace):
             cube['measures'] = cube['measures'] + xtr_msr
 
 
-        rows = cls._db.dice(cls, cube['dimensions'], cube['measures'],
+        rows = ctx.db.dice(cls, cube['dimensions'], cube['measures'],
                             cube['filters'])
 
         nb_dim = len(cube['dimensions'])
@@ -296,7 +294,7 @@ class Space(metaclass=MetaSpace):
                 defaults[d.name] = d.key(defaults[d.name])
             cube.append((d, d.key(d.coord()), len(d.levels)))
 
-        cls._db.snapshot(cls, other_space, cube, other_space._db_measures,
+        ctx.db.snapshot(cls, other_space, cube, other_space._db_measures,
                          space_filters=space_filters,
                          other_filters=other_filters,
                          defaults=defaults,

@@ -1,32 +1,35 @@
 from contextlib import contextmanager
+import threading
 
-from .backend import get_backend, LoadType
-from .dimension import Dimension
-from .event import register
-from .measure import Measure
-from .space import Space, build_space, SPACES, get_space, iter_spaces
+ctx = threading.local()
+
+from .backend import LoadType, get_backend
 from .utils import Cli
+from .dimension import Dimension
+from .event import register, trigger
+from .measure import Measure
+from .space import Space, build_space, get_space, iter_spaces
+
 
 class UserError(Exception):
     pass
 
 
 @contextmanager
-def connect(uri, rollback_on_close=False):
-    db = backend.get_backend(uri)
-    for name, cls in SPACES.items():
-        cls._db = db
-        for dim in cls._dimensions:
-            dim.set_db(db)
+def connect(uri, rollback_on_close=False, readonly=False):
+    trigger('clear_cache')
 
-        for msr in cls._db_measures:
-            msr.set_db(db)
-
+    db = get_backend(uri, readonly=readonly)
+    for cls in iter_spaces():
         db.register(cls)
+    ctx.db = db
+    ctx.uri = uri
     try:
-        yield
+        yield db
     except:
         db.close(rollback=True)
         raise
     else:
         db.close(rollback=rollback_on_close)
+
+

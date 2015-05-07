@@ -9,10 +9,17 @@ def format_query(stm, params):
         stm = stm.replace(':'+k, str(v))
     return stm
 
+
 class SqliteBackend(SqlBackend):
 
-    def __init__(self, path):
-        self.connection = sqlite3.connect(path)
+    def __init__(self, path, readonly=False):
+        if readonly and path != ':memory:':
+            path = 'file:%s?mode=ro' % path
+            uri = True
+        else:
+            uri=False
+
+        self.connection = sqlite3.connect(path, uri=uri)
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA journal_mode=WAL')
         self.cursor.execute('PRAGMA foreign_keys=1')
@@ -265,8 +272,8 @@ class SqliteBackend(SqlBackend):
                 'WHERE c.depth = ? AND c.parent = ?' % (
                     dim.closure_table, dim.table)
             args = (depth, parent_id)
-
-        return self.cursor.execute(stm, args)
+        res = list(self.cursor.execute(stm, args))
+        return res
 
     def get_parents(self, dim):
         stm = 'SELECT id, name, parent FROM "%s"'\
@@ -463,6 +470,7 @@ class SqliteBackend(SqlBackend):
             self.connection.rollback()
         else:
             self.connection.commit()
+
         self.connection.close()
 
     def get_columns_info(self, name):

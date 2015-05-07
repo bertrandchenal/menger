@@ -12,7 +12,7 @@ else:
     from .postgresql import PGBackend
 
 
-def get_backend(uri):
+def get_backend(uri, readonly=False):
     """
     uri string examples:
 
@@ -22,8 +22,8 @@ def get_backend(uri):
     postgresql://user:password@ / dbname
     """
 
-    if not (uri.startswith('sqlite://') or uri.startswith('postgresql://')):
-        return SqliteBackend(uri)
+    if not '://' in uri:
+        uri = 'sqlite:///' + uri
 
     engine, other = uri.split('://', 1)
     host, db = other.split('/', 1)
@@ -42,10 +42,10 @@ def get_backend(uri):
         if host:
             cn_str += "host='%s' " % host
 
-        backend = PGBackend(cn_str)
+        backend = PGBackend(cn_str, readonly=readonly)
 
     elif engine == 'sqlite':
-        backend = SqliteBackend(db)
+        backend = SqliteBackend(db, readonly=readonly)
 
     else:
         raise Exception('Backend %s not known' % backend)

@@ -29,14 +29,10 @@ class Sum(Measure):
             raise Exception('Type %s not supported for dimension %s' % (
                 type, label
             ))
-        self._db = None
         super(Sum, self).__init__(label)
 
     def increment(self, old_value, new_value):
         return old_value + new_value
-
-    def set_db(self, db):
-        self._db = db
 
 
 class Computed(Measure):

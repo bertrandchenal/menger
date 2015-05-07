@@ -1,5 +1,7 @@
 from itertools import chain
+
 from .measure import Measure
+
 
 class Cli(object):
 
