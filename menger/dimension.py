@@ -251,7 +251,9 @@ class Tree(Dimension):
         # Reset cache
         trigger('clear_cache')
 
-    def search(self, prefix, max_depth):
+    def search(self, prefix, max_depth=None):
+        if max_depth is None:
+            max_depth = self.depth
         return ctx.db.search(self, prefix, max_depth)
 
 
