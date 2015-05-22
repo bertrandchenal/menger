@@ -3,6 +3,7 @@ class Measure(object):
 
     def __init__(self, label):
         self.label = label
+        self.name = None
 
     def format(self, value, fmt_type=None):
         return value
@@ -15,6 +16,12 @@ class Measure(object):
                 yield total
                 return
             total += new_value
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        return self.name == other.name
 
 
 class Sum(Measure):

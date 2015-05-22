@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from copy import copy
 from hashlib import md5
 from itertools import chain
@@ -194,33 +194,56 @@ class Space(metaclass=MetaSpace):
     def dice(cls, coordinates=[], measures=[], filters=[]):
         cube = cls.build_cube(coordinates, measures, filters)
 
-        fn_msr = []
+        fn_msr = defaultdict(list)
         msr_idx = {}
         xtr_msr = []
         # Collect computed measure from the query
         for pos, m in enumerate(cube['measures']):
             if isinstance(m, measure.Computed):
                 cube['measures'][pos] = None
-                fn_msr.append((pos, m))
+                fn_msr[m].append(pos)
         # Collapse resulting list
         cube['measures'] = list(filter(None, cube['measures']))
 
         if fn_msr:
-            # Build msr_idx to acces future values by position
+            # Fill msr_idx to acces future values by position
             for pos, m in enumerate(cube['measures']):
                 msr_idx[m.name] = pos
 
-            # Add extra measure if needed
-            for _, m in fn_msr:
-                for arg in m.args:
-                    if arg not in msr_idx:
-                        new_msr = getattr(cls, arg)
+            # Search for extra measures
+            fn_args = list(chain(*(m.args for m in fn_msr)))
+            depend_args = []
+            dep_order = -1
+            while fn_args:
+                for arg in fn_args:
+                    if arg in msr_idx:
+                        continue
+                    new_msr = getattr(cls, arg)
+                    if new_msr in fn_msr:
+                        continue
+                    if isinstance(new_msr, measure.Computed):
+                        for a in new_msr.args:
+                            if a not in fn_msr:
+                                depend_args.append(a)
+                        fn_msr[new_msr].append(dep_order)
+                        dep_order -= 1
+                    else:
                         xtr_msr.append(new_msr)
                         pos = len(xtr_msr) + len(cube['measures']) - 1
                         msr_idx[arg] = pos
+                fn_args = depend_args
+                depend_args = []
+
+            # Add extra measures to cube
             cube['measures'] = cube['measures'] + xtr_msr
 
-
+            # Record how to loop on measures (to respect dependency
+            # defined by declaration order)
+            fn_idx = dict((m, pos) for pos, m in enumerate(cls._measures))
+            fn_loop = sorted(
+                ((pos, m) for m in fn_msr for pos in fn_msr[m]),
+                key=lambda x: fn_idx[x[1]],
+            )
         rows = ctx.db.dice(cls, cube['dimensions'], cube['measures'],
                             cube['filters'])
 
@@ -239,14 +262,24 @@ class Space(metaclass=MetaSpace):
                 continue
 
             fn_vals = []
-            for pos, m in fn_msr:
+            fn_vals_by_name = {}
+            for pos, m in fn_loop:
                 # Build arguments and launch computation
-                args = [values[msr_idx[name]] for name in m.args]
+                args = []
+                for name in m.args:
+                    if name in msr_idx:
+                        val = values[msr_idx[name]]
+                    else:
+                        val = fn_vals_by_name[name]
+                    args.append(val)
                 val = m.compute(*args)
-                fn_vals.append((pos, val))
+                fn_vals_by_name[m.name] = val
+                # Add result to fn_vals only if it wasn't a dependency
+                if pos >= 0:
+                    fn_vals.append((pos, val))
 
             if nb_xtr:
-                # Remove extra measure
+                # Remove extra measures
                 values = values[:-nb_xtr]
 
             values = tuple(cls.merge_computed_measures(values, fn_vals))
