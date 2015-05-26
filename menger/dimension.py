@@ -76,7 +76,6 @@ class Dimension(object):
 
         if not create:
             return None
-
         return self.create_id(coord)
 
 
@@ -125,7 +124,7 @@ class Tree(Dimension):
 
     def _get_key(self, coord):
         if len(coord) > self.depth:
-            return None
+            raise Exception('Invalid key length')
         parent = coord[:-1]
 
         if coord:
