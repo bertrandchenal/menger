@@ -125,12 +125,15 @@ class Space(metaclass=MetaSpace):
 
     @classmethod
     def match(cls, point, filters):
-        # AND lopp
+        # AND loop
         for name, values in filters:
             coord = point[name]
             # OR loop
             for value in values:
-                # coord len is always longer or equal to value's
+                # Point shallower than filter -> mismatch
+                if len(coord) < len(value):
+                    continue
+                # Check items
                 if all(x == y for x, y in zip(coord, value)):
                     break
             else:
