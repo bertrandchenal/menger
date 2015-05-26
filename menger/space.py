@@ -309,6 +309,10 @@ class Space(metaclass=MetaSpace):
             fpos, fval = next(fn_vals, (None, None))
 
     @classmethod
+    def delete(cls, filters=None):
+        ctx.db.delete(cls, cls.build_filters(filters))
+
+    @classmethod
     def snapshot(cls, other_space, filters=None, defaults=None):
         cube = []
         current_dim = [d.name for d in cls._dimensions]

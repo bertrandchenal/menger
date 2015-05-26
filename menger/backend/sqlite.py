@@ -445,18 +445,20 @@ class SqliteBackend(SqlBackend):
             where.append(subsel)
         return ' AND '.join(where), params
 
-    def snapshot(self, space, other_space, cube, msrs, space_filters,
-                 other_filters, defaults):
-        # Delete existing data
-        query = 'DELETE FROM %s' % other_space._table
-        if other_filters:
-            filter_clause = self.build_filter_clause(other_space, other_filters)
+    def delete(self, space, filters):
+        query = 'DELETE FROM %s' % space._table
+        if filters:
+            filter_clause = self.build_filter_clause(space, filters)
             filter_stm, params = filter_clause
             query = query + ' WHERE ' + filter_stm
         else:
             params = {}
-
         self.cursor.execute(query, params)
+
+    def snapshot(self, space, other_space, cube, msrs, space_filters,
+                 other_filters, defaults):
+        # Delete existing data
+        self.delete(other_space, other_filters)
 
         # Copy into other_space
         dice_stm , dice_params = self.dice_query(
