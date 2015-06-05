@@ -17,8 +17,7 @@ class UserError(Exception):
 
 @contextmanager
 def connect(uri, rollback_on_close=False, readonly=False):
-    trigger('clear_cache')
-
+    trigger('clear_dimension_cache')
     db = get_backend(uri, readonly=readonly)
     for cls in iter_spaces():
         db.register(cls)
@@ -31,5 +30,4 @@ def connect(uri, rollback_on_close=False, readonly=False):
         raise
     else:
         db.close(rollback=rollback_on_close)
-
 

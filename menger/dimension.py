@@ -11,12 +11,12 @@ KEY_CACHE = {}
 NAME_CACHE = {}
 FULL_NAME_CACHE = {}
 
-def clear_cache():
+def clear_dimension_cache():
     global KEY_CACHE, NAME_CACHE, FULL_NAME_CACHE
     KEY_CACHE = {}
     NAME_CACHE = {}
     FULL_NAME_CACHE = {}
-register('clear_cache', clear_cache)
+register('clear_dimension_cache', clear_dimension_cache)
 
 
 class Dimension(object):
