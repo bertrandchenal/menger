@@ -287,6 +287,7 @@ class SqliteBackend(SqlBackend):
         defaults = defaults or {}
         select = []
         joins = []
+        join_alias = {}
         group_by = []
         params = {}
 
@@ -297,6 +298,7 @@ class SqliteBackend(SqlBackend):
                 select.append('%s AS %s' % (v, dim.name))
             else:
                 alias = 'join_%s' % pos
+                join_alias[dim.name] = alias
                 joins.append(self.closure_join(space, dim, alias))
                 f = '%s.parent' % alias
                 select.append(f)
@@ -320,14 +322,15 @@ class SqliteBackend(SqlBackend):
         zero_cond = ' OR '.join('%s != 0' % m.name for m in msrs)
         where = [zero_cond]
         if filters:
-            filter_stm, filter_params = self.build_filter_clause(space, filters)
-            params.update(filter_params)
+            filter_stm = self.build_filter_clause(
+                space, filters , join_alias)
             where.append(filter_stm)
         stm += ' WHERE ' + ' AND '.join('(%s)' % w for w in where)
 
         # Group clause
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
+
         return stm, params
 
     def dice(self, space, cube, msrs, filters=[]):
@@ -422,28 +425,26 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(query % format_args, query_args)
         return self.cursor.fetchall()
 
-    def build_filter_clause(self, space, filters):
-        where = []
-        cnt = 0
-        params = {}
-        for dim, keys in filters:
-            cnt += 1
-            conds = ('parent = :filter_%s_%s' % (cnt, pos) \
-                     for pos, _ in enumerate(keys))
-            params.update(
-                ('filter_%s_%s' % (cnt, pos), key) \
-                for pos, key in enumerate(keys)
-            )
+    def build_filter_clause(self, space, filters, join_alias=None):
+        if join_alias is None:
+            join_alias = {}
 
-            subsel = '%(spc)s.%(dim)s in (SELECT child FROM %(closure)s '\
-                   'WHERE %(cond)s )' % {
-                       'spc': space._table,
-                       'dim': dim.name,
-                       'closure': dim.closure_table,
-                       'cond': ' OR '.join(conds)
-                   }
+        where = []
+        for dim, keys in filters:
+            cond = 'parent in (%s)' % ','.join(str(k) for k in keys)
+            if dim.name in join_alias:
+                field = '%s.child' % join_alias[dim.name]
+            else:
+                field = "%s.%s" % (space._table, dim.name)
+
+            subsel = '%(field)s in (SELECT child FROM %(closure)s '\
+                     'WHERE %(cond)s )' % {
+                         'field': field,
+                         'closure': dim.closure_table,
+                         'cond': cond
+                     }
             where.append(subsel)
-        return ' AND '.join(where), params
+        return ' AND '.join(where)
 
     def delete(self, space, filters):
         query = 'DELETE FROM %s' % space._table
