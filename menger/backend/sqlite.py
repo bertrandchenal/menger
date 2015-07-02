@@ -450,11 +450,9 @@ class SqliteBackend(SqlBackend):
         query = 'DELETE FROM %s' % space._table
         if filters:
             filter_clause = self.build_filter_clause(space, filters)
-            filter_stm, params = filter_clause
+            filter_stm = filter_clause
             query = query + ' WHERE ' + filter_stm
-        else:
-            params = {}
-        self.cursor.execute(query, params)
+        self.cursor.execute(query)
 
     def snapshot(self, space, other_space, cube, msrs, space_filters,
                  other_filters, defaults):
