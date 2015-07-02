@@ -38,13 +38,18 @@ class MetaSpace(type):
         for b in bases:
             if not type(b) == cls:
                 continue
-            if hasattr(b, '_dimensions'):
-                for dim in b._dimensions:
-                    attrs[dim.name] = copy(dim)
 
-            if hasattr(b, '_measures'):
-                for msr in b._measures:
-                    attrs[msr.name] = copy(msr)
+            for dim in getattr(b, '_dimensions', []):
+                if dim.name in attrs:
+                    # Let current class override parent attributes
+                    continue
+                attrs[dim.name] = copy(dim)
+
+            for msr in getattr(b, '_measures', []):
+                if msr.name in attrs:
+                    # Let current class override parent attributes
+                    continue
+                attrs[msr.name] = copy(msr)
 
         dimensions = []
         measures = []
