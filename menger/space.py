@@ -166,23 +166,19 @@ class Space(metaclass=MetaSpace):
         return res
 
     @classmethod
-    def build_cube(cls, coordinates=None, measures=None, filters=None):
-        coordinates = coordinates or []
-        measures = measures or []
-        filters = filters or []
-
-        cube = {
-            'dimensions': [],
-            'measures': [],
-            'filters': [],
-        }
+    def build_cube_dims(cls, coordinates=None):
+        if not coordinates:
+            return []
+        dimensions = []
         for name, value in coordinates:
             dim = cls.get_dimension(name)
+            value = dim.coord(value)
             key, depth = dim.explode(value)
-            cube['dimensions'].append((dim, key, depth))
+            dimensions.append((dim, key, depth))
+        return dimensions
 
-        cube['filters'] = cls.build_filters(filters)
-
+    @classmethod
+    def build_cube_msrs(cls, measures=None):
         for name in measures:
             if not hasattr(cls, name):
                 raise Exception('%s is not a measure of %s' % (
@@ -191,31 +187,43 @@ class Space(metaclass=MetaSpace):
             if not isinstance(msr, measure.Measure):
                 raise Exception('%s is not a measure of %s' % (
                     name, cls._name))
-            cube['measures'].append(msr)
-
-        if not cube['measures']:
-            cube['measures'] = cls._db_measures
-
-        return cube
+            yield msr
 
     @classmethod
     def dice(cls, coordinates=[], measures=[], filters=[]):
-        cube = cls.build_cube(coordinates, measures, filters)
+        # XXX use args like this
+        # select = ['country', 'date', ('as', 1, 'currency'), 'amout_eur']
+        # filters = [
+        #  ('date', [(2015, 7)]),
+        #  ('country', [('EU', 'BE'), ('EU', 'FR')]), # User ACL
+        #  ('country', [('EU',)]),                    # User drill
+        # ]
+        # group_by = {
+        #   date: 3,
+        #   country: 1,
+        # }
+
+        cube_dims = cls.build_cube_dims(coordinates)
+        cube_filters = cls.build_filters(filters)
+        if measures:
+            cube_msrs = list(cls.build_cube_msrs(measures))
+        else:
+            cube_msrs = cls._db_measures
 
         fn_msr = defaultdict(list)
         msr_idx = {}
         xtr_msr = []
         # Collect computed measure from the query
-        for pos, m in enumerate(cube['measures']):
+        for pos, m in enumerate(cube_msrs):
             if isinstance(m, measure.Computed):
-                cube['measures'][pos] = None
+                cube_msrs[pos] = None
                 fn_msr[m].append(pos)
         # Collapse resulting list
-        cube['measures'] = list(filter(None, cube['measures']))
+        cube_msrs = list(filter(None, cube_msrs))
 
         if fn_msr:
             # Fill msr_idx to acces future values by position
-            for pos, m in enumerate(cube['measures']):
+            for pos, m in enumerate(cube_msrs):
                 msr_idx[m.name] = pos
 
             # Search for extra measures
@@ -237,13 +245,13 @@ class Space(metaclass=MetaSpace):
                         dep_order -= 1
                     else:
                         xtr_msr.append(new_msr)
-                        pos = len(xtr_msr) + len(cube['measures']) - 1
+                        pos = len(xtr_msr) + len(cube_msrs) - 1
                         msr_idx[arg] = pos
                 fn_args = depend_args
                 depend_args = []
 
             # Add extra measures to cube
-            cube['measures'] = cube['measures'] + xtr_msr
+            cube_msrs = cube_msrs + xtr_msr
 
             # Record how to loop on measures (to respect dependency
             # defined by declaration order)
@@ -252,11 +260,9 @@ class Space(metaclass=MetaSpace):
                 ((pos, m) for m in fn_msr for pos in fn_msr[m]),
                 key=lambda x: fn_idx[x[1]],
             )
-        rows = ctx.db.dice(cls, cube['dimensions'], cube['measures'],
-                            cube['filters'])
-
-        nb_dim = len(cube['dimensions'])
-        cube_dims = [x[0] for x in cube['dimensions']]
+        rows = ctx.db.dice(cls, cube_dims, cube_msrs, cube_filters)
+        nb_dim = len(cube_dims)
+        cube_dims = [x[0] for x in cube_dims]
         nb_xtr = len(xtr_msr)
 
         # Returns (key, values) tuples (allows building a dict)
@@ -318,9 +324,9 @@ class Space(metaclass=MetaSpace):
         ctx.db.delete(cls, cls.build_filters(filters))
 
     @classmethod
-    def snapshot(cls, other_space, filters=None, defaults=None):
-        cube = []
-        current_dim = [d.name for d in cls._dimensions]
+    def snapshot(cls, other_space, coordinates=None, filters=None,
+                 defaults=None):
+
         filters = filters or []
         defaults = defaults or {}
 
@@ -333,16 +339,24 @@ class Space(metaclass=MetaSpace):
         else:
             other_filters = space_filters
 
-        # Compute default keys and build cube definition
+        # Compute default keys
         for d in other_space._dimensions:
             if d.name in defaults:
                 defaults[d.name] = d.key(defaults[d.name])
-            cube.append((d, d.key(d.coord()), len(d.levels)))
 
-        ctx.db.snapshot(cls, other_space, cube, other_space._db_measures,
-                         space_filters=space_filters,
-                         other_filters=other_filters,
-                         defaults=defaults,
+        # Build cube dimensions
+        if coordinates:
+            cube_dims = cls.build_cube_dims(coordinates)
+        else:
+            cube_dims = []
+            for d in other_space._dimensions:
+                cube_dims.append((d, d.key(d.coord()), len(d.levels)))
+
+        ctx.db.snapshot(
+            cls, other_space, cube_dims, other_space._db_measures,
+            space_filters=space_filters,
+            other_filters=other_filters,
+            defaults=defaults,
         )
 
     @classmethod
