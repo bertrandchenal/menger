@@ -171,7 +171,7 @@ class Tree(Dimension):
         self.name_cache[new_id] = (name, parent)
         return new_id
 
-    def drill(self, values):
+    def drill(self, values=tuple()):
         key = self.key(values)
         if key is None:
             return
