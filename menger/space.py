@@ -326,7 +326,6 @@ class Space(metaclass=MetaSpace):
     @classmethod
     def snapshot(cls, other_space, coordinates=None, filters=None,
                  defaults=None):
-
         filters = filters or []
         defaults = defaults or {}
 
@@ -346,7 +345,7 @@ class Space(metaclass=MetaSpace):
 
         # Build cube dimensions
         if coordinates:
-            cube_dims = cls.build_cube_dims(coordinates)
+            cube_dims = other_space.build_cube_dims(coordinates)
         else:
             cube_dims = []
             for d in other_space._dimensions:

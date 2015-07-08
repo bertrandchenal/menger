@@ -456,6 +456,10 @@ class SqliteBackend(SqlBackend):
 
     def snapshot(self, space, other_space, cube, msrs, space_filters,
                  other_filters, defaults):
+        # FIXME it's to messy to do this at db level, we should do
+        # space.dice and other_space.load instead.
+
+
         # Delete existing data
         self.delete(other_space, other_filters)
 
