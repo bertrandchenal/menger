@@ -152,7 +152,7 @@ class Space(metaclass=MetaSpace):
         if not filters:
             return
         res = []
-        for name, values in filters:
+        for name, values, *depths in filters:
             dim = cls.get_dimension(name)
             keys = []
             for value in values:
@@ -162,7 +162,7 @@ class Space(metaclass=MetaSpace):
                     continue
                 keys.append(key)
             if keys:
-                res.append((dim, keys))
+                res.append((dim, keys) + tuple(depths))
         return res
 
     @classmethod

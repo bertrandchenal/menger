@@ -66,7 +66,6 @@ def test_reparent_subtree(session):
     ]
     dice_check(reparent_dice_checks)
 
-
     reparent_drill_checks = [
         {
             'coordinate' : ('USA',),

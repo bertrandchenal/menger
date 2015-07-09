@@ -430,8 +430,11 @@ class SqliteBackend(SqlBackend):
             join_alias = {}
 
         where = []
-        for dim, keys in filters:
+        for dim, keys, *depths in filters:
             cond = 'parent in (%s)' % ','.join(str(k) for k in keys)
+            if depths:
+                cond += 'AND depth in (%s)' % ','.join(map(str, depths))
+
             if dim.name in join_alias:
                 field = '%s.child' % join_alias[dim.name]
             else:
