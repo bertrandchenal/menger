@@ -110,6 +110,7 @@ class SqliteBackend(SqlBackend):
         # TODO check for equivalent in postgresql
         nb_edit = super(SqliteBackend, self).load(
             space, keys_vals, load_type=load_type)
+        self.cursor.execute('VACUUM')
         self.cursor.execute('ANALYZE')
         return nb_edit
 
