@@ -5,23 +5,34 @@ from .measure import Measure
 
 class Cli(object):
 
-    actions = ('info', 'drill', 'dice', 'help')
-
-    def __init__(self, space, query_args, fd=None):
+    def __init__(self, space, query_args, prog=None, fd=None):
         self.space = space
+        self.prog = prog or ''
         self.fd = fd
-
-        self.args = self.split_args(query_args[1:])
+        self.args = query_args
         getattr(self, 'do_' + query_args[0])()
 
+    @classmethod
+    def actions(cls):
+        return tuple(m[3:] for m in dir(cls) if m.startswith('do_'))
+
     def do_dice(self):
+        '''
+        Usage:
+          %(prog)s dice [dim_name=drill_path ...] [msr...]
+        examples:
+          %(prog)s dice
+          %(prog)s dice date
+          %(prog)s drill date=2022/*
+          %(prog)s drill date=*/* geography amount average
+        '''
         from . import UserError
 
         measures = []
         dimensions = []
 
         # Pre-fill args without values
-        for name, values in self.args:
+        for name, values in self.splitted_args():
             if isinstance(getattr(self.space, name), Measure):
                 measures.append(name)
                 continue
@@ -29,6 +40,12 @@ class Cli(object):
             if not values:
                 values = (None,)
             dimensions.append((name, values))
+
+        # Force at least one dimesion
+        if not dimensions:
+            first = self.space._dimensions[0].name
+            value = (None,)
+            dimensions.append((first, value))
 
         # Query DB
         try:
@@ -70,10 +87,37 @@ class Cli(object):
         print(line, file=self.fd)
 
     def do_drill(self):
-        for name, values in self.args:
+        '''
+        Usage:
+          %(prog)s drill dim_name
+          %(prog)s drill dim_name=drill_path
+        examples:
+          %(prog)s drill date
+          %(prog)s drill date=*/*
+        '''
+        for name, values in self.splitted_args():
             self.drill(name, values)
 
+    def do_help(self):
+        '''
+        Usage:
+          %(prog)s help action
+        '''
+        if len(self.args) == 1:
+            name = 'help'
+        else:
+            name = self.args[1]
+            if name not in self.actions():
+                name = 'help'
+
+        method = getattr(self, 'do_' + name)
+        print(method.__doc__ % {'prog': self.prog})
+
     def do_info(self):
+        '''
+        Usage:
+          %(prog)s info
+        '''
         print('Dimensions', file=self.fd)
         for dim in self.space._dimensions:
             print(' ' + dim.name, file=self.fd)
@@ -93,6 +137,10 @@ class Cli(object):
             print('/'.join(map(str, res)), file=self.fd)
 
     def do_load(self):
+        '''
+        Usage:
+          %(prog)s load [path ...]
+        '''
         for path in self.args:
             fh = open(path)
             first = next(fh, "").strip()
@@ -106,8 +154,8 @@ class Cli(object):
                 self.space.load((json.loads(l.strip()) for l in fh))
                 fh.close()
 
-    def split_args(self, args):
-        for arg in args:
+    def splitted_args(self):
+        for arg in self.args[1:]:
             if '=' in arg:
                 name, values = arg.split('=')
                 values = tuple(values.split('/'))
