@@ -41,14 +41,14 @@ class MetaSpace(type):
 
             for dim in getattr(b, '_dimensions', []):
                 if dim.name in attrs:
-                    # Let current class override parent attributes
-                    continue
+                    # Keep current class dim, but at the righ position
+                    attrs[dim.name] = attrs.pop(dim.name)
                 attrs[dim.name] = copy(dim)
 
             for msr in getattr(b, '_measures', []):
                 if msr.name in attrs:
-                    # Let current class override parent attributes
-                    continue
+                    # Keep current class msr, but at the righ position
+                    attrs[msr.name] = attrs.pop(msr.name)
                 attrs[msr.name] = copy(msr)
 
         dimensions = []
