@@ -1,13 +1,15 @@
 from itertools import chain
+import json
 
 from .measure import Measure
 
 
 class Cli(object):
 
-    def __init__(self, space, query_args, prog=None, fd=None):
+    def __init__(self, space, query_args, fmt, prog=None, fd=None):
         self.space = space
         self.prog = prog or ''
+        self.fmt = fmt or 'col'
         self.fd = fd
         self.args = query_args
         getattr(self, 'do_' + query_args[0])()
@@ -15,6 +17,10 @@ class Cli(object):
     @classmethod
     def actions(cls):
         return tuple(m[3:] for m in dir(cls) if m.startswith('do_'))
+
+    @classmethod
+    def formats(cls):
+        return tuple(m[4:] for m in dir(cls) if m.startswith('fmt'))
 
     def do_dice(self):
         '''
@@ -64,7 +70,8 @@ class Cli(object):
         # Output Results
         content = list(self.format_rows(sorted(results)))
 
-        self.print_table(content, headers)
+        fmt = getattr(self, 'fmt_' + self.fmt)
+        fmt(content, headers)
 
     def format_rows(self, rows):
         for key, vals in rows:
@@ -72,7 +79,12 @@ class Cli(object):
             res += [ '%.2f' % v for v in vals]
             yield res
 
-    def print_table(self, rows, headers, sep=' ', page_len=10):
+    def fmt_json(self, rows, headers):
+        data = [dict(zip(headers, row)) for row in rows]
+        print(json.dumps(data, indent=4))
+
+    def fmt_col(self, rows, headers):
+        sep = ' '
         lengths = (len(h) for h in headers)
         for row in rows:
             lengths = map(max, (len(i) for i in row), lengths)
