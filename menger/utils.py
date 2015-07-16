@@ -1,8 +1,9 @@
 from itertools import chain
+import argparse
 import json
 
 from .measure import Measure
-
+from .space import iter_spaces
 
 class Cli(object):
 
@@ -13,14 +14,6 @@ class Cli(object):
         self.fd = fd
         self.args = query_args
         getattr(self, 'do_' + query_args[0])()
-
-    @classmethod
-    def actions(cls):
-        return tuple(m[3:] for m in dir(cls) if m.startswith('do_'))
-
-    @classmethod
-    def formats(cls):
-        return tuple(m[4:] for m in dir(cls) if m.startswith('fmt'))
 
     def do_dice(self):
         '''
@@ -183,3 +176,37 @@ class Cli(object):
                 name = arg
                 values = None
             yield name, values
+    @classmethod
+    def actions(cls):
+        return tuple(m[3:] for m in dir(cls) if m.startswith('do_'))
+
+    @classmethod
+    def formats(cls):
+        return tuple(m[4:] for m in dir(cls) if m.startswith('fmt'))
+
+    @classmethod
+    def run(cls):
+        parser = argparse.ArgumentParser(description='Cli reports.')
+
+        actions = ' | '.join(Cli.actions())
+        parser.add_argument('query', nargs='+', help=actions)
+        spaces = ' | '.join(s._name for s in iter_spaces())
+        parser.add_argument('--space', '-s', default='Sale', help=spaces)
+        formats =' | '.join(Cli.formats())
+        parser.add_argument('--format', '-f', default='col', help=formats)
+        args = parser.parse_args()
+
+        if args.query[0] not in Cli.actions():
+            parser.print_help()
+            exit()
+
+        spc = None
+        for space in iter_spaces():
+            if args.space.lower() == space._name.lower():
+                spc = space
+                break
+        else:
+            print('Space "%s" not found' % args.space)
+            exit()
+
+        cli = Cli(spc, args.query, args.format, prog=parser.prog)
