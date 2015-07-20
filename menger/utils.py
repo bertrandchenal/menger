@@ -125,7 +125,8 @@ class Cli(object):
         '''
         print('Dimensions', file=self.fd)
         for dim in self.space._dimensions:
-            print(' ' + dim.name, file=self.fd)
+            levels = ', '.join(dim.levels)
+            print(' %s  [%s]' % (dim.name, levels), file=self.fd)
         print('Measures', file=self.fd)
         for msr in self.space._measures:
             print(' ' + msr.name, file=self.fd)
