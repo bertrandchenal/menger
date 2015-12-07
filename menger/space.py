@@ -146,84 +146,30 @@ class Space(metaclass=MetaSpace):
                 return False
         return True
 
-
     @classmethod
-    def build_filters(cls, filters):
-        if not filters:
-            return
-        res = []
-        for name, values, *depths in filters:
-            dim = cls.get_dimension(name)
-            keys = []
-            for value in values:
-                key = dim.key(value)
-                if key is None:
-                    # filters value is not known (warning ?)
-                    continue
-                keys.append(key)
-            if keys:
-                res.append((dim, keys) + tuple(depths))
-        return res
-
-    @classmethod
-    def build_cube_dims(cls, coordinates=None):
-        if not coordinates:
-            return []
-        dimensions = []
-        for name, value in coordinates:
-            dim = cls.get_dimension(name)
-            value = dim.coord(value)
-            key, depth = dim.explode(value)
-            dimensions.append((dim, key, depth))
-        return dimensions
-
-    @classmethod
-    def build_cube_msrs(cls, measures=None):
-        for name in measures:
-            if not hasattr(cls, name):
-                raise Exception('%s is not a measure of %s' % (
-                    name, cls._name))
-            msr = getattr(cls, name)
-            if not isinstance(msr, measure.Measure):
-                raise Exception('%s is not a measure of %s' % (
-                    name, cls._name))
-            yield msr
-
-    @classmethod
-    def dice(cls, coordinates=[], measures=[], filters=[]):
-        # XXX use args like this
-        # select = ['country', 'date', ('as', 1, 'currency'), 'amout_eur']
-        # filters = [
-        #  ('date', [(2015, 7)]),
-        #  ('country', [('EU', 'BE'), ('EU', 'FR')]), # User ACL
-        #  ('country', [('EU',)]),                    # User drill
-        # ]
-        # group_by = {
-        #   date: 3,
-        #   country: 1,
-        # }
-
-        cube_dims = cls.build_cube_dims(coordinates)
-        cube_filters = cls.build_filters(filters)
-        if measures:
-            cube_msrs = list(cls.build_cube_msrs(measures))
-        else:
-            cube_msrs = cls._db_measures
-
+    def dice(cls, select=[], filters=[]):
         fn_msr = defaultdict(list)
         msr_idx = {}
         xtr_msr = []
+
+        if not select:
+            select = cls.all_fields()
+
         # Collect computed measure from the query
-        for pos, m in enumerate(cube_msrs):
-            if isinstance(m, measure.Computed):
-                cube_msrs[pos] = None
-                fn_msr[m].append(pos)
+        for pos, field in enumerate(select):
+            if isinstance(field, measure.Computed):
+                select[pos] = None
+                fn_msr[field].append(pos)
+            elif isinstance(field, dimension.Dimension):
+                # Take first level
+                select[pos] = field[0]
+
         # Collapse resulting list
-        cube_msrs = list(filter(None, cube_msrs))
+        select = list(filter(None, select))
 
         if fn_msr:
             # Fill msr_idx to acces future values by position
-            for pos, m in enumerate(cube_msrs):
+            for pos, m in enumerate(select):
                 msr_idx[m.name] = pos
 
             # Search for extra measures
@@ -245,13 +191,13 @@ class Space(metaclass=MetaSpace):
                         dep_order -= 1
                     else:
                         xtr_msr.append(new_msr)
-                        pos = len(xtr_msr) + len(cube_msrs) - 1
+                        pos = len(xtr_msr) + len(select) - 1
                         msr_idx[arg] = pos
                 fn_args = depend_args
                 depend_args = []
 
-            # Add extra measures to cube
-            cube_msrs = cube_msrs + xtr_msr
+            # Add extra measures to select
+            select = select + xtr_msr
 
             # Record how to loop on measures (to respect dependency
             # defined by declaration order)
@@ -260,19 +206,14 @@ class Space(metaclass=MetaSpace):
                 ((pos, m) for m in fn_msr for pos in fn_msr[m]),
                 key=lambda x: fn_idx[x[1]],
             )
-        rows = ctx.db.dice(cls, cube_dims, cube_msrs, cube_filters)
-        nb_dim = len(cube_dims)
-        cube_dims = [x[0] for x in cube_dims]
+        rows = ctx.db.dice(cls, select, filters)
         nb_xtr = len(xtr_msr)
 
-        # Returns (key, values) tuples (allows building a dict)
+        # Returns rows
         for row in rows:
-            # Key is the combination of coordinates
-            key = tuple(d.get_name(i) for i, d in zip(row, cube_dims))
-            values = row[nb_dim:]
-
+            row = tuple(cls.get_names(row, select))
             if not fn_msr:
-                yield key, values
+                yield row
                 continue
 
             fn_vals = []
@@ -282,7 +223,7 @@ class Space(metaclass=MetaSpace):
                 args = []
                 for name in m.args:
                     if name in msr_idx:
-                        val = values[msr_idx[name]]
+                        val = row[msr_idx[name]]
                     else:
                         val = fn_vals_by_name[name]
                     args.append(val)
@@ -294,10 +235,18 @@ class Space(metaclass=MetaSpace):
 
             if nb_xtr:
                 # Remove extra measures
-                values = values[:-nb_xtr]
+                row = row[:-nb_xtr]
 
-            values = tuple(cls.merge_computed_measures(values, fn_vals))
-            yield key, values
+            row = tuple(cls.merge_computed_measures(row, fn_vals))
+            yield row
+
+    @classmethod
+    def get_names(cls, row, select):
+        for val, field in zip(row, select):
+            if isinstance(field, (dimension.Level, dimension.Coordinate)):
+                yield field.dim.get_name(val)
+            else:
+                yield val
 
     @staticmethod
     def merge_computed_measures(values, fn_vals):
@@ -321,42 +270,49 @@ class Space(metaclass=MetaSpace):
 
     @classmethod
     def delete(cls, filters=None):
-        ctx.db.delete(cls, cls.build_filters(filters))
+        ctx.db.delete(cls, filters)
 
     @classmethod
-    def snapshot(cls, other_space, coordinates=None, filters=None,
-                 defaults=None):
+    def snapshot(cls, other_space, select=None, filters=None):
         filters = filters or []
-        defaults = defaults or {}
+        to_delete = filters[:]
 
-        # Build filters
-        space_filters = cls.build_filters(filters)
-        if defaults:
-            for k, v in defaults.items():
-                filters.append((k, [v]))
-            other_filters = other_space.build_filters(filters)
-        else:
-            other_filters = space_filters
+        # Build select based on other_space if missing
+        if not select:
+            select = other_space.all_fields()
 
-        # Compute default keys
-        for d in other_space._dimensions:
-            if d.name in defaults:
-                defaults[d.name] = d.key(defaults[d.name])
+        # if static coord are provided we only delete the
+        # corresponding rows
+        for pos, field in enumerate(select):
+            # Translate dimension into first level
+            if isinstance(field, dimension.Dimension):
+                select[pos] = field[0]
+            elif isinstance(field, dimension.Coordinate):
+                # Use static values as delete filter
+                to_delete.append((field.dim, [field]))
+                # Resolve coordinate
+                select[pos] = field.key()
+            elif not isinstance(field, (measure.Measure, dimension.Level)):
+                raise ValueError('Unexpected field "%s" in snapshot' % field)
 
-        # Build cube dimensions
-        if coordinates:
-            cube_dims = other_space.build_cube_dims(coordinates)
-        else:
-            cube_dims = []
-            for d in other_space._dimensions:
-                cube_dims.append((d, d.key(d.coord()), len(d.levels)))
+        ctx.db.snapshot(cls, other_space, select, filters=filters,
+                        to_delete=to_delete)
 
-        ctx.db.snapshot(
-            cls, other_space, cube_dims, other_space._db_measures,
-            space_filters=space_filters,
-            other_filters=other_filters,
-            defaults=defaults,
-        )
+    @classmethod
+    def all_fields(cls):
+        '''
+        Return all fields (all dimensions and all non-computed measures)
+        of the current space.
+        '''
+        fields = []
+        for d in cls._dimensions:
+            fields.append(d[-1])
+        for m in cls._measures:
+            if isinstance(m, measure.Computed):
+                continue
+            fields.append(m)
+        return fields
+
 
     @classmethod
     def get_dimension(cls, name):

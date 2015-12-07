@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import chain, repeat
 import sqlite3
 
@@ -23,6 +24,8 @@ class SqliteBackend(SqlBackend):
         self.cursor = self.connection.cursor()
         self.cursor.execute('PRAGMA journal_mode=WAL')
         self.cursor.execute('PRAGMA foreign_keys=1')
+        self.nb_tmp = 0
+
         super(SqliteBackend, self).__init__()
 
     def register(self, space):
@@ -283,87 +286,180 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(stm)
         return self.cursor.fetchall()
 
-    def dice_query(self, space, cube, msrs, filters=None, defaults=None):
+    def dice_query(self, space, fields, filters=None):
+        from menger import Coordinate, Level, Measure
+
         filters = filters or []
-        defaults = defaults or {}
         select = []
         joins = []
-        join_alias = {}
+        tmp_tables = defaultdict(list)
         group_by = []
         params = {}
+        nb_default = 0
+        query_dims = set()
 
         # Add dimensions to select
-        for pos, (dim, key, depth) in enumerate(cube):
-            if dim.name in defaults:
-                v = defaults[dim.name]
-                select.append('%s AS %s' % (v, dim.name))
+        for field in fields:
+            if isinstance(field, Measure):
+                select.append('sum(%s)' % field.name)
+            elif isinstance(field, Level):
+                alias = 'tmp_%s' % self.nb_tmp
+                self.nb_tmp += 1
+                tmp_tables[field.dim.name].append(alias)
+                joins.append(
+                    self.tmp_join(space, alias, field.dim, field.depth)
+                )
+                col = '%s.parent' % alias
+                select.append(col)
+                group_by.append(col)
+                query_dims.add(field.dim)
             else:
-                alias = 'join_%s' % pos
-                join_alias[dim.name] = alias
-                joins.append(self.closure_join(space, dim, alias))
-                f = '%s.parent' % alias
-                select.append(f)
-                group_by.append(f)
-                params[alias + '_key'] = key
-                params[alias + '_depth'] = depth
+                if isinstance(field, Coordinate):
+                    field = field.key()
+                col = '%s_default' % nb_default
+                nb_default += 1
+                select.append(':' + col)
+                params[col] = field
 
+        # Enforce latest version if a version field is present on the
+        # space but not in the query
         vdim = space._versioned
-        if vdim and vdim.name not in (dim.name for dim, *_ in cube):
-            mkey = vdim.max_key()
-            if mkey is not None:
-                filters.append((vdim, [mkey]))
+        for dim, *_ in filters:
+            query_dims.add(dim)
+        if vdim and vdim not in query_dims:
+            last_version = vdim.last_coord()
+            if last_version is not None:
+                filters.append(vdim.match(last_version))
+
+        tmp_tables, joins = self.build_filters(space, filters, tmp_tables,
+                                               joins)
 
         # Base query
-        select.extend('sum(%s)' % m.name for m in msrs)
         stm = 'SELECT %s FROM "%s"' % (', '.join(select), space._table)
         if joins:
             stm += ' ' + ' '.join(joins)
 
         # Where clause
+        where = []
+        msrs = (f for f in fields if isinstance(f, Measure))
         zero_cond = ' OR '.join('%s != 0' % m.name for m in msrs)
-        where = [zero_cond]
-        if filters:
-            filter_stm = self.build_filter_clause(
-                space, filters , join_alias)
-            where.append(filter_stm)
-        stm += ' WHERE ' + ' AND '.join('(%s)' % w for w in where)
+        if zero_cond:
+            where.append(zero_cond)
+            stm += ' WHERE ' + zero_cond
 
         # Group clause
         if group_by:
             stm += ' GROUP BY ' + ', '.join(group_by)
 
+        # print(format_query(stm, params))
         return stm, params
 
-    def dice(self, space, cube, msrs, filters=[]):
-        stm , params = self.dice_query(space, cube, msrs, filters)
+    def dice(self, space, fields, filters=[]):
+        stm, params = self.dice_query(space, fields, filters)
         self.cursor.execute(stm, params)
-        return self.cursor.fetchall()
+        res = self.cursor.fetchall()
+        return res
 
-    def closure_join(self, spc, dim, alias):
-        # Build base condition to allow to group by parent
-        subselect = 'SELECT child from "%(closure)s" ' \
-                    ' WHERE ('\
-                      'parent = :%(alias)s_key AND ' \
-                      'depth = :%(alias)s_depth'\
-                    ')' % {
-                        'closure': dim.closure_table,
-                        'alias': alias,
-                    }
+    def depth_cond(self, spc, dim, depth):
+        pass
 
-        # Build join clause
-        join = 'JOIN %(closure)s AS %(alias)s ' \
-               'ON ('\
-                 '%(alias)s.child = "%(spc)s".%(dim)s ' \
-                 'AND %(alias)s.parent IN (%(subselect)s))'
+    def build_filters(self, space, filters, tmp_tables=None, joins=None):
+        tmp_tables = tmp_tables or defaultdict(list)
+        joins = joins or []
+
+        # Create extra tmp tables for filters if not in selection
+        for fdim, coords, *depths in filters:
+            if fdim.name not in tmp_tables:
+                alias = 'tmp_%s' % self.nb_tmp
+                self.nb_tmp += 1
+                tmp_tables[fdim.name].append(alias)
+                joins.append(self.tmp_join(space, alias, fdim))
+
+        # Filters dimensions
+        for fdim, coords, *depths in filters:
+            for tt in tmp_tables[fdim.name]:
+                cond = 'SELECT child FROM %s WHERE parent in (%s)' %(
+                    fdim.closure_table,
+                    ','.join(str(c.key()) for c in coords)
+                    )
+                if depths:
+                    cond += ' AND depth in (%s)' % ','.join(map(str, depths))
+                qr = 'DELETE FROM %(tmp)s WHERE child NOT IN (%(cond)s)'
+                params = {
+                    'tmp': tt,
+                    'cond': cond
+                }
+                self.cursor.execute(qr % params)
+
+        return tmp_tables, joins
+
+    def tmp_join(self, spc, alias, dim, depth=None):
+        # Create tmp table
+        qr = 'CREATE TEMPORARY table %s ('\
+             'parent INTEGER, child INTEGER, depth INTEGER'\
+             ')' % alias
+        self.cursor.execute(qr)
+
+        # Fill it
+        if depth is None:
+            qr = 'INSERT INTO %(tmp)s (parent, child, depth) '\
+                 'SELECT parent, child, depth '\
+                 'FROM %(cls)s WHERE parent = 1'
+            params = {
+                'cls': dim.closure_table,
+                'tmp': alias,
+                }
+        else:
+            subselect = 'SELECT child from "%(cls)s" ' \
+                        'WHERE ('\
+                          'parent = 1 ' \
+                          'AND depth = %(depth)s'\
+                        ')' % {
+                            'cls': dim.closure_table,
+                            'depth': depth + 1,
+                        }
+
+            qr = 'INSERT INTO %(tmp)s (parent, child, depth) '\
+                 'SELECT parent, child, depth '\
+                 'FROM %(cls)s WHERE parent IN (%(subselect)s)'
+            params = {
+                'cls': dim.closure_table,
+                'tmp': alias,
+                'subselect': subselect,
+            }
+        self.cursor.execute(qr % params)
+
+        # Build join expression
+        join = 'JOIN %(tmp)s ON (%(tmp)s.child = "%(spc)s"."%(dim)s")'
         params = {
-            'closure': dim.closure_table,
-            'spc': spc._table,
             'dim': dim.name,
-            'subselect': subselect,
-            'alias': alias,
+            'spc': spc._table,
+            'tmp': alias,
         }
 
         return join % params
+
+    def delete(self, space, filters):
+        query = 'DELETE FROM %s' % space._table
+        tmp_tables, joins = self.build_filters(space, filters)
+        conditions = []
+        for dim, tables in tmp_tables.items():
+            for table in tables:
+                cond = '%s in (SELECT child from %s)' % (dim, table)
+                conditions.append(cond)
+        if conditions:
+            query +=  ' WHERE ' + ' AND '.join(conditions)
+        self.cursor.execute(query)
+
+    def snapshot(self, space, other_space, select, filters, to_delete):
+        # Delete existing data
+        self.delete(other_space, to_delete)
+
+        # Copy into other_space
+        dice_stm , dice_params = self.dice_query(space, select, filters)
+        stm = 'INSERT INTO %s ' % other_space._table
+        stm = stm + dice_stm
+        self.cursor.execute(stm, dice_params)
 
     def glob(self, dim, parent_id, parent_depth, values, filters=[]):
         depth = len(values)
@@ -426,55 +522,13 @@ class SqliteBackend(SqlBackend):
         self.cursor.execute(query % format_args, query_args)
         return self.cursor.fetchall()
 
-    def build_filter_clause(self, space, filters, join_alias=None):
-        if join_alias is None:
-            join_alias = {}
-
-        where = []
-        for dim, keys, *depths in filters:
-            cond = 'parent in (%s)' % ','.join(str(k) for k in keys)
-            if depths:
-                cond += 'AND depth in (%s)' % ','.join(map(str, depths))
-
-            if dim.name in join_alias:
-                field = '%s.child' % join_alias[dim.name]
-            else:
-                field = "%s.%s" % (space._table, dim.name)
-
-            subsel = '%(field)s in (SELECT child FROM %(closure)s '\
-                     'WHERE %(cond)s )' % {
-                         'field': field,
-                         'closure': dim.closure_table,
-                         'cond': cond
-                     }
-            where.append(subsel)
-        return ' AND '.join(where)
-
-    def delete(self, space, filters):
-        query = 'DELETE FROM %s' % space._table
-        if filters:
-            filter_clause = self.build_filter_clause(space, filters)
-            filter_stm = filter_clause
-            query = query + ' WHERE ' + filter_stm
-        self.cursor.execute(query)
-
-    def snapshot(self, space, other_space, cube, msrs, space_filters,
-                 other_filters, defaults):
-        # FIXME it's to messy to do this at db level, we should do
-        # space.dice and other_space.load instead.
-
-
-        # Delete existing data
-        self.delete(other_space, other_filters)
-
-        # Copy into other_space
-        dice_stm , dice_params = self.dice_query(
-            space, cube, msrs, space_filters, defaults)
-        stm = 'INSERT INTO %s ' % other_space._table
-        stm = stm + dice_stm
-        self.cursor.execute(stm, dice_params)
-
     def close(self, rollback=False):
+        # Remove previous tmp tables if any
+        for i in range(self.nb_tmp): # FIXME will fail with multi-threads
+            table = 'tmp_%s' % i
+            self.cursor.execute('DROP TABLE %s' % table)
+        self.nb_tmp = 0
+
         if rollback:
             self.connection.rollback()
         else:

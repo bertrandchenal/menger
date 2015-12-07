@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import OrderedDict
 from itertools import islice, takewhile
 
 from .event import register, trigger
@@ -16,7 +16,12 @@ def clear_dimension_cache():
     KEY_CACHE = {}
     NAME_CACHE = {}
     FULL_NAME_CACHE = {}
-register('clear_dimension_cache', clear_dimension_cache)
+register('clear_cache', clear_dimension_cache)
+
+
+def iindex(iterable, position):
+    'Return item from iterable at given position'
+    return next(islice(iterable, position, position+1))
 
 
 class Dimension(object):
@@ -79,6 +84,14 @@ class Dimension(object):
         return self.create_id(coord)
 
 
+class Level:
+
+    def __init__(self, name, depth, dim):
+        self.name = name
+        self.depth = depth
+        self.dim = dim
+
+
 class Tree(Dimension):
 
     '''A Tree dimension is defined by a list of level names, whose length
@@ -89,8 +102,30 @@ class Tree(Dimension):
 
     def __init__(self, label, levels, type=str, alias=None):
         super(Tree, self).__init__(label, type=type, alias=alias)
-        self.levels = levels
+        self.levels = OrderedDict()
+        for depth, l in enumerate(levels):
+            self.levels[l] = Level(l, depth, self)
         self.depth = len(self.levels)
+
+    def __getitem__(self, level_id):
+        if isinstance(level_id, int):
+            if level_id < 0:
+                level_id = len(self.levels) + level_id
+            level_id = iindex(self.levels.keys(), level_id)
+        return self.levels[level_id]
+
+    def __call__(self, value):
+        '''
+        Instanciate a Coordinate object for the given value
+        '''
+        return Coordinate(self, value)
+
+    def match(self, *coords, depth=None):
+        'Return a filter tuple based on coordinates'
+        coords = [self(c) for c in coords]
+        if depth is not None:
+            return (self, coords, depth)
+        return (self, coords)
 
     def set_name(self, name):
         super(Tree, self).set_name(name)
@@ -224,7 +259,7 @@ class Tree(Dimension):
             return
 
         record_id = self.key(coord)
-        new_parent_id = self.key(new_parent_coord)
+        new_parent_id = self.key(new_parent_coord, create=True)
         ctx.db.reparent(self, record_id, new_parent_id)
 
         # Merge any resulting duplicate
@@ -265,8 +300,17 @@ class Version(Tree):
         if self.depth > 1:
             raise ValueError('Version dimension support only on level')
 
-    def max_key(self):
+    def last_coord(self):
         items = list(self.drill(tuple()))
         if not items:
             return None
-        return self.key((max(items),))
+        return (max(items),)
+
+class Coordinate:
+
+    def __init__(self, dim, value):
+        self.dim = dim
+        self.value = value
+
+    def key(self):
+        return self.dim.key(self.value)

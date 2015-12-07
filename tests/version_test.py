@@ -51,14 +51,23 @@ def session():
 
 
 def test_version(session):
-    res = list(VersionCube.dice())
-    assert res == [((), (300.0,))]
+    res = list(VersionCube.dice([VersionCube.total]))
+    assert res == [(300.0,)]
 
-    res = sorted(VersionCube.dice(coordinates=[('place', (None,))]))
-    assert res == [((('EU',),), (140.0,)), ((('USA',),), (160.0,))]
+    res = sorted(VersionCube.dice([VersionCube.place, VersionCube.total]))
+    assert res == [
+        (('EU',), 140.0),
+        (('USA',), 160.0),
+    ]
 
-    res = sorted(VersionCube.dice(coordinates=[('version', (None,))]))
-    assert res == [((('2015-01',),), (30.0,)), ((('2015-02',),), (300.0,))]
+    res = sorted(VersionCube.dice([VersionCube.version, VersionCube.total]))
+    assert res == [
+        (('2015-01',), 30.0),
+        (('2015-02',), 300.0),
+    ]
 
-    res = sorted(VersionCube.dice(coordinates=[('version', ('2015-01',))]))
-    assert res == [((('2015-01',),), (30.0,))]
+    res = sorted(VersionCube.dice(
+        [VersionCube.version, VersionCube.total],
+        [VersionCube.version.match(('2015-01',))],
+    ))
+    assert res == [(('2015-01',), 30.0)]

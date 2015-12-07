@@ -4,26 +4,25 @@ def test_reparent_leaf(session):
     Cube.place.reparent(('EU', 'BE', 'CRL'), ('EU', 'FR'))
 
     reparent_dice_checks = [
-        {'coordinates': [],
-         'measures': ['total', 'count'],
-         'values' : [((), (30.0, 4.0))]
+        {'select': [Cube.total, Cube.count],
+         'values' : [(30.0, 4.0)]
      },
-        {'coordinates': [('date', (2014, 1, 1))],
-         'measures': ['total'],
-         'values' : [(((2014, 1, 1),), (10.0,))]
+        {'select': [Cube.date['Day'], Cube.total],
+         'filters': [Cube.date.match((2014, 1, 1))],
+         'values' : [((2014, 1, 1), 10.0)]
      },
-        {'coordinates': [('date', (2014, 1, None))],
-         'measures': ['total'],
-         'values' : [(((2014, 1, 1),), (10.0,)),
-                     (((2014, 1, 2),), (20.0,))]
+        {'select': [Cube.date['Day'], Cube.total],
+         'filters': [Cube.date.match((2014, 1))],
+         'values' : [((2014, 1, 1), 10.0),
+                     ((2014, 1, 2), 20.0)]
      },
-        {'coordinates': [('date', (2014, 1, None)), ('place', (None, None))],
-         'measures': ['total'],
+        {'select': [Cube.date['Day'], Cube.place['Country'], Cube.total],
+         'filters': [Cube.date.match((2014, 1))],
          'values' :[
-             (((2014, 1, 1), ('EU', 'BE')), (2.0,)),
-             (((2014, 1, 1), ('EU', 'FR')), (8.0,)),
-             (((2014, 1, 2), ('EU', 'FR')), (4.0,)),
-             (((2014, 1, 2), ('USA', 'NYC')), (16.0,))]
+             ((2014, 1, 1), ('EU', 'BE'), 2.0),
+             ((2014, 1, 1), ('EU', 'FR'), 8.0),
+             ((2014, 1, 2), ('EU', 'FR'), 4.0),
+             ((2014, 1, 2), ('USA', 'NYC'), 16.0)]
      }, # FIXME TEST DRILL LAST LEVEL
     ]
     dice_check(reparent_dice_checks)
@@ -51,17 +50,16 @@ def test_reparent_leaf(session):
 def test_reparent_subtree(session):
     Cube.place.reparent(('EU', 'BE'), ('USA',))
     reparent_dice_checks = [
-        {'coordinates': [],
-         'measures': ['total', 'count'],
-         'values' : [((), (30.0, 4.0))]
+        {'select': [Cube.total, Cube.count],
+         'values' : [(30.0, 4.0)]
         },
-        {'coordinates': [('date', (2014, 1, None)), ('place', (None, None))],
-         'measures': ['total'],
+        {'select': [Cube.date['Day'], Cube.place['Country'], Cube.total],
+         'filters': [Cube.date.match((2014, 1))],
          'values' : [
-             (((2014, 1, 1), ('EU', 'FR')), (8.0,)),
-             (((2014, 1, 1), ('USA', 'BE')), (2.0,)),
-             (((2014, 1, 2), ('USA', 'BE')), (4.0,)),
-             (((2014, 1, 2), ('USA', 'NYC')), (16.0,))]
+             ((2014, 1, 1), ('EU', 'FR'), 8.0),
+             ((2014, 1, 1), ('USA', 'BE'), 2.0),
+             ((2014, 1, 2), ('USA', 'BE'), 4.0),
+             ((2014, 1, 2), ('USA', 'NYC'), 16.0)]
      },
     ]
     dice_check(reparent_dice_checks)
@@ -88,17 +86,16 @@ def test_merge_reparent(session):
     Cube.place.reparent(('EU', 'BE'), ('USA',))
 
     reparent_dice_checks = [
-        {'coordinates': [],
-         'measures': ['total', 'count'],
-         'values' : [((), (30.0, 4.0))]
+        {'select': [Cube.total, Cube.count],
+         'values' : [(30.0, 4.0)]
         },
-        {'coordinates': [('date', (2014, 1, None)), ('place', (None, None))],
-         'measures': ['total'],
+        {'select': [Cube.date['Day'], Cube.place['Country'], Cube.total],
+         'filters': [Cube.date.match((2014, 1))],
          'values' : [
-             (((2014, 1, 1), ('EU', 'FR')), (8.0,)),
-             (((2014, 1, 1), ('USA', 'BE')), (2.0,)),
-             (((2014, 1, 2), ('USA', 'BE')), (4.0,)),
-             (((2014, 1, 2), ('USA', 'NYC')), (16.0,))]
+             ((2014, 1, 1), ('EU', 'FR'), 8.0),
+             ((2014, 1, 1), ('USA', 'BE'), 2.0),
+             ((2014, 1, 2), ('USA', 'BE'), 4.0),
+             ((2014, 1, 2), ('USA', 'NYC'), 16.0)]
      },
     ]
     dice_check(reparent_dice_checks)
@@ -117,10 +114,10 @@ def test_rename(session):
     Cube.place.rename(('EU', 'FR', 'ORY'), 'CDG')
 
     rename_dice_checks = [
-        {'coordinates': [('place', ('EU', 'FR', None))],
-         'measures': ['total'],
+        {'select': [Cube.place['City'], Cube.total],
+         'filters': [Cube.place.match(('EU', 'FR'))],
          'values' :[
-             ((('EU', 'FR', 'CDG'),), (8.0,)),
+             (('EU', 'FR', 'CDG'), 8.0),
          ]
      },
     ]
@@ -154,10 +151,10 @@ def test_merge_rename(session):
     Cube.place.rename(('EU', 'BE', 'BRU'), 'CRL')
 
     rename_dice_checks = [
-        {'coordinates': [('place', ('EU', 'BE', None))],
-         'measures': ['total'],
+        {'select': [Cube.place['City'], Cube.total],
+         'filters': [Cube.place.match(('EU', 'BE'))],
          'values' :[
-             ((('EU', 'BE', 'CRL'),), (6.0,)),
+             (('EU', 'BE', 'CRL'), 6.0),
          ]
      },
     ]
@@ -179,10 +176,9 @@ def test_delete(session):
     Cube.place.delete(('USA',))
 
     dice_check([
-        {'coordinates': [],
-         'measures': ['total', 'count'],
+        {'select': [Cube.total, Cube.count],
          'values' :[
-             ((), (14.0, 3.0)),
+             (14.0, 3.0),
          ]
      },
     ])

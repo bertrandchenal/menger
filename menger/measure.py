@@ -1,3 +1,4 @@
+import locale
 
 class Measure(object):
 
@@ -37,6 +38,11 @@ class Sum(Measure):
                 type, label
             ))
         super(Sum, self).__init__(label)
+
+    def format(self, value, fmt_type=None):
+        if self.type == float:
+            return locale.format('%.2f', value)
+        return value
 
     def increment(self, old_value, new_value):
         return old_value + new_value

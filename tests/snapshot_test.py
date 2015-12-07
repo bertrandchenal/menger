@@ -17,12 +17,27 @@ def test_snapshot(session):
 
 
 def test_snapshot_filter(session):
-    filters = [('date', [(2014, 1, 1)])]
-    Cube.snapshot(OtherCube, filters)
+    filters = [Cube.date.match((2014, 1, 1))]
+    Cube.snapshot(OtherCube, filters=filters)
     checks = [
-        {'coordinates': [],
-         'measures': ['total', 'count'],
-         'values' : [((), (10.0, 2.0))]
+        {'select': [Cube.total, Cube.count],
+         'values' : [(10.0, 2.0)]
      },
     ]
     dice_check(checks, OtherCube)
+
+def test_snapshot_default(session):
+    select = [
+        OtherCube.date['Day'],
+        OtherCube.place(('EU', 'BE', 'BRU')),
+        OtherCube.total,
+        OtherCube.count,
+    ]
+    Cube.snapshot(OtherCube, select)
+    checks = [
+        {'select': [Cube.total, Cube.count],
+         'values' : [(30.0, 4.0)]
+     },
+    ]
+    dice_check(checks, OtherCube)
+

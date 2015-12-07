@@ -27,18 +27,20 @@ class Cli(object):
         '''
         from . import UserError
 
-        measures = []
-        dimensions = []
+        select = []
 
         # Pre-fill args without values
         for name, values in self.splitted_args():
-            if isinstance(getattr(self.space, name), Measure):
-                measures.append(name)
+            attr = getattr(self.space, name)
+            if isinstance(attr, Measure):
+                select.append(attr)
                 continue
-
-            if not values:
+            if values:
+                filters.append(attr)
+            else:
                 values = (None,)
-            dimensions.append((name, values))
+            level = attr.levels[len(values) - 1]
+            select.append(level)
 
         # Force at least one dimesion
         if not dimensions:
