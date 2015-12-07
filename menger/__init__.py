@@ -17,8 +17,6 @@ class UserError(Exception):
 
 @contextmanager
 def connect(uri, rollback_on_close=False, readonly=False):
-    print("%s should clear cache only when not readonly", __file__)
-    trigger('clear_cache')
     db = get_backend(uri, readonly=readonly)
     for cls in iter_spaces():
         db.register(cls)
@@ -31,4 +29,5 @@ def connect(uri, rollback_on_close=False, readonly=False):
         raise
     else:
         db.close(rollback=rollback_on_close)
-
+        if not readonly:
+            trigger('clear_cache')
