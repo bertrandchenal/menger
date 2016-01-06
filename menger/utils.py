@@ -28,9 +28,11 @@ class Cli(object):
         from . import UserError
 
         select = []
+        filters = []
+        args = list(self.splitted_args())
 
         # Pre-fill args without values
-        for name, values in self.splitted_args():
+        for name, values in args:
             attr = getattr(self.space, name)
             if isinstance(attr, Measure):
                 select.append(attr)
@@ -39,28 +41,23 @@ class Cli(object):
                 filters.append(attr)
             else:
                 values = (None,)
-            level = attr.levels[len(values) - 1]
+            level = attr[len(values) - 1]
             select.append(level)
 
         # Force at least one dimesion
-        if not dimensions:
-            first = self.space._dimensions[0].name
-            value = (None,)
-            dimensions.append((first, value))
+        if not select:
+            first = self.space._dimensions[0][0]
+            select.append(first)
 
         # Query DB
         try:
-            results = self.space.dice(dimensions, measures)
+            results = self.space.dice(select)
         except UserError as e:
             print('Error:', e , file=self.fd)
             return
 
         # build headers
-        headers = list(getattr(self.space, n).label for n, _ in dimensions)
-        if measures:
-            headers.extend(getattr(self.space, m).label for m in measures)
-        else:
-            headers.extend(m.label for m in self.space._measures)
+        headers = list(getattr(self.space, n).label for n, _ in args)
 
         # Output Results
         content = list(self.format_rows(sorted(results)))
@@ -69,10 +66,13 @@ class Cli(object):
         fmt(content, headers)
 
     def format_rows(self, rows):
-        for key, vals in rows:
-            res = ['/'.join(str(i) for i in col) for col in key]
-            res += [ '%.2f' % v for v in vals]
-            yield res
+        for vals in rows:
+            yield list(map(self.format_cell, vals))
+
+    def format_cell(self, value):
+        if isinstance(value, tuple):
+            return '/'.join(str(v) for v in value)
+        return str(value)
 
     def fmt_json(self, rows, headers):
         data = [dict(zip(headers, row)) for row in rows]
@@ -90,8 +90,8 @@ class Cli(object):
             self.print_line(row, lengths, sep=sep)
 
     def print_line(self, items, lengths, sep=' '):
-        line = ' '.join(i.ljust(l) for i,l in zip(items, lengths))
-        print(line, file=self.fd)
+        line = ' '.join(i.ljust(l) for i, l in zip(items, lengths))
+        print(line.rstrip(), file=self.fd)
 
     def do_drill(self):
         '''
@@ -149,18 +149,10 @@ class Cli(object):
         Usage:
           %(prog)s load [path ...]
         '''
-        for path in self.args:
+        for path in self.args[1:]:
             fh = open(path)
-            first = next(fh, "").strip()
-            if not first:
-                print('File %s ignored' % path, file=self.fd)
-                continue
-            first = json.loads(first)
-
-            with self.connect(first):
-                self.space.load([first])
-                self.space.load((json.loads(l.strip()) for l in fh))
-                fh.close()
+            self.space.load((json.loads(l.strip()) for l in fh))
+            fh.close()
 
     def splitted_args(self):
         for arg in self.args[1:]:
@@ -188,13 +180,13 @@ class Cli(object):
         return tuple(m[4:] for m in dir(cls) if m.startswith('fmt'))
 
     @classmethod
-    def run(cls):
+    def run(cls, default_space=None):
         parser = argparse.ArgumentParser(description='Cli reports.')
 
         actions = ' | '.join(Cli.actions())
         parser.add_argument('query', nargs='+', help=actions)
         spaces = ' | '.join(s._name for s in iter_spaces())
-        parser.add_argument('--space', '-s', default='Sale', help=spaces)
+        parser.add_argument('--space', '-s', default=default_space, help=spaces)
         formats =' | '.join(Cli.formats())
         parser.add_argument('--format', '-f', default='col', help=formats)
         args = parser.parse_args()
@@ -205,7 +197,7 @@ class Cli(object):
 
         spc = None
         for space in iter_spaces():
-            if args.space.lower() == space._name.lower():
+            if args.space and args.space.lower() == space._name.lower():
                 spc = space
                 break
         else:

@@ -3,7 +3,7 @@ import os
 import pytest
 from menger import dimension, Space, measure, connect
 
-URI = ':memory:' #'/tmp/test.db'#
+URI = ':memory:' #'/tmp/test.db'
 
 DATA = [
     {'date': [2014, 1, 1],

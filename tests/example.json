@@ -1,4 +1,4 @@
-{"category": ["Electronics", "Television & Video", "ham", "spam"], "total": 20, "count": 2}
-{"category": ["Electronics", "Computers", "foo", "bar"], "total": 10, "count": 1}
-{"category": ["Electronics", "Camera & Photo", "stram", "gram"], "total": 30, "count": 4}
-{"category": ["Jewellery", "Men"], "total": 5, "count":1}
+{"date": [2014, 1, 1], "place": ["EU", "BE", "BRU"], "total": 2, "count": 1}
+{"date": [2014, 1, 2], "place": ["EU", "BE", "CRL"], "total": 4, "count": 1}
+{"date": [2014, 1, 1], "place": ["EU", "FR", "ORY"], "total": 8, "count": 1}
+{"date": [2014, 1, 2], "place": ["USA", "NYC", "JFK"], "total": 16, "count": 1}
