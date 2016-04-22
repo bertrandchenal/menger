@@ -20,10 +20,9 @@ class Cli(object):
         Usage:
           %(prog)s dice [dim_name=drill_path ...] [msr...]
         examples:
-          %(prog)s dice
           %(prog)s dice date
-          %(prog)s drill date=2022/*
-          %(prog)s drill date=*/* geography amount average
+          %(prog)s dice date=2022/*
+          %(prog)s dice date=*/* geography amount average
         '''
         from . import UserError
 
