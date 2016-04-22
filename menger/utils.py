@@ -38,10 +38,10 @@ class Cli(object):
                 select.append(attr)
                 continue
             if values:
-                filters.append(attr)
+                filters.append(attr.match(values))
             else:
                 values = (None,)
-            level = attr[len(values) - 1]
+            level = attr[len(values)]
             select.append(level)
 
         # Force at least one dimesion
@@ -51,7 +51,7 @@ class Cli(object):
 
         # Query DB
         try:
-            results = self.space.dice(select)
+            results = self.space.dice(select, filters=filters)
         except UserError as e:
             print('Error:', e , file=self.fd)
             return
