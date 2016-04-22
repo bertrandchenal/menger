@@ -195,11 +195,15 @@ class Cli(object):
             exit()
 
         spc = None
-        for space in iter_spaces():
-            if args.space and args.space.lower() == space._name.lower():
-                spc = space
-                break
+        if not args.space:
+            spc = next(iter(iter_spaces()))
         else:
+            for space in iter_spaces():
+                if args.space.lower() == space._name.lower():
+                    spc = space
+                    break
+
+        if spc is None:
             print('Space "%s" not found' % args.space)
             exit()
 
