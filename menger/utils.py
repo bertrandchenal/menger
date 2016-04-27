@@ -1,4 +1,4 @@
-from itertools import chain
+from itertools import takewhile
 import argparse
 import json
 
@@ -37,10 +37,13 @@ class Cli(object):
                 select.append(attr)
                 continue
             if values:
+                depth = len(values) - 1
+                values = tuple(takewhile(lambda x: x is not None, values))
                 filters.append(attr.match(values))
             else:
+                depth = 0
                 values = (None,)
-            level = attr[len(values)]
+            level = attr[depth]
             select.append(level)
 
         # Force at least one dimesion
