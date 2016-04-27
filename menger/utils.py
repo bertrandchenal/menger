@@ -176,6 +176,7 @@ class Cli(object):
                 name = arg
                 values = None
             yield name, values
+
     @classmethod
     def actions(cls):
         return tuple(m[3:] for m in dir(cls) if m.startswith('do_'))
