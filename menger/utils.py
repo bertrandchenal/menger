@@ -93,7 +93,10 @@ class Cli(object):
 
     def print_line(self, items, lengths, sep=' '):
         line = ' '.join(i.ljust(l) for i, l in zip(items, lengths))
-        print(line.rstrip(), file=self.fd)
+        try:
+            print(line.rstrip(), file=self.fd)
+        except BrokenPipeError:
+            pass
 
     def do_drill(self):
         '''
