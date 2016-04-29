@@ -1,9 +1,13 @@
 from itertools import takewhile
 import argparse
 import json
+import re
 
+from .dimension import Dimension
 from .measure import Measure
 from .space import iter_spaces
+
+LEVEL_RE = re.compile('^(.+)\[(.+)\]$')
 
 class Cli(object):
 
@@ -31,8 +35,7 @@ class Cli(object):
         args = list(self.splitted_args())
 
         # Pre-fill args without values
-        for name, values in args:
-            attr = getattr(self.space, name)
+        for attr, values in args:
             if isinstance(attr, Measure):
                 select.append(attr)
                 continue
@@ -40,11 +43,10 @@ class Cli(object):
                 depth = len(values) - 1
                 values = tuple(takewhile(lambda x: x is not None, values))
                 filters.append(attr.match(values))
+                level = attr[depth]
+                select.append(level)
             else:
-                depth = 0
-                values = (None,)
-            level = attr[depth]
-            select.append(level)
+                select.append(attr)
 
         # Force at least one dimesion
         if not select:
@@ -59,7 +61,7 @@ class Cli(object):
             return
 
         # build headers
-        headers = list(getattr(self.space, n).label for n, _ in args)
+        headers = list(n.label for n, _ in args)
 
         # Output Results
         content = list(self.format_rows(sorted(results)))
@@ -107,8 +109,8 @@ class Cli(object):
           %(prog)s drill date
           %(prog)s drill date=*/*
         '''
-        for name, values in self.splitted_args():
-            self.drill(name, values)
+        for attr, values in self.splitted_args():
+            self.drill(attr, values)
 
     def do_help(self):
         '''
@@ -138,14 +140,9 @@ class Cli(object):
         for msr in self.space._measures:
             print(' ' + msr.name, file=self.fd)
 
-    def drill(self, name, values):
+    def drill(self, dim, values):
         values = values or (None,)
 
-        if not hasattr(self.space, name):
-            exit('"%s" has no dimension "%s"' % (
-                    self.space._name, name))
-
-        dim = getattr(self.space, name)
         for res in sorted(dim.glob(values)):
             print('/'.join(map(str, res)), file=self.fd)
 
@@ -164,18 +161,43 @@ class Cli(object):
             if '=' in arg:
                 name, values = arg.split('=')
                 values = tuple(values.split('/'))
-                if not hasattr(self.space, name):
-                    exit('"%s" has no dimension "%s"' % (
-                            self.space._name, name))
-
-                dim = getattr(self.space, name)
-                values = tuple(None if v == '*' else dim.type(v) \
+                attr = self.get_attr(name)
+                values = tuple(None if v == '*' else attr.type(v) \
                                for v in values)
 
             else:
-                name = arg
                 values = None
-            yield name, values
+                # Try to detect dim[level] pattern
+                m = LEVEL_RE.match(arg)
+                if m:
+                    groups = m.groups()
+                    if len(groups) != 2:
+                        exit('Argument "%s" not understood' % arg)
+                    name, level = groups
+                    dim = self.get_dim(name)
+                    attr = self.get_level(dim, level)
+                else:
+                    attr = self.get_attr(arg)
+            yield attr, values
+
+    def get_level(self, dim, name):
+        try:
+            return dim[name]
+        except KeyError:
+            exit("Dimension %s as no level %s" % (dim.name, name))
+
+    def get_dim(self, name):
+        dim = self.get_attr(name)
+        if not isinstance(dim, Dimension):
+            exit('"%s" is not a dimension of "%s"' % (
+                dim.name, self.space._name))
+        return dim
+
+    def get_attr(self, name):
+        if not hasattr(self.space, name):
+            exit('"%s" has no attribute "%s"' % (
+                self.space._name, name))
+        return getattr(self.space, name)
 
     @classmethod
     def actions(cls):
