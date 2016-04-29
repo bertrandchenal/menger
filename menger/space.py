@@ -21,7 +21,6 @@ class MetaSpace(type):
        return OrderedDict()
 
     def __new__(cls, name, bases, attrs):
-
         # Define meta-data
         if not '_name' in attrs:
             attrs['_name'] = name
@@ -41,15 +40,23 @@ class MetaSpace(type):
 
             for dim in getattr(b, '_dimensions', []):
                 if dim.name in attrs:
+                    # If type changed, ignore attr
+                    if not isinstance(attrs[dim.name], dimension.Dimension):
+                        continue
                     # Keep current class dim, but at the righ position
                     attrs[dim.name] = attrs.pop(dim.name)
-                attrs[dim.name] = copy(dim)
+                else:
+                    attrs[dim.name] = copy(dim)
 
             for msr in getattr(b, '_measures', []):
                 if msr.name in attrs:
+                    # If type changed, ignore attr
+                    if not isinstance(attrs[msr.name], measure.Measure):
+                        continue
                     # Keep current class msr, but at the righ position
                     attrs[msr.name] = attrs.pop(msr.name)
-                attrs[msr.name] = copy(msr)
+                else:
+                    attrs[msr.name] = copy(msr)
 
         dimensions = []
         measures = []
