@@ -154,7 +154,7 @@ class Space(metaclass=MetaSpace):
         return True
 
     @classmethod
-    def dice(cls, select=[], filters=[]):
+    def dice(cls, select=[], filters=[], format=None):
         fn_msr = defaultdict(list)
         msr_idx = {}
         xtr_msr = []
@@ -218,7 +218,7 @@ class Space(metaclass=MetaSpace):
 
         # Returns rows
         for row in rows:
-            row = tuple(cls.get_names(row, select))
+            row = tuple(cls.get_names(row, select, format=format))
             if not fn_msr:
                 yield row
                 continue
@@ -248,10 +248,15 @@ class Space(metaclass=MetaSpace):
             yield row
 
     @classmethod
-    def get_names(cls, row, select):
+    def get_names(cls, row, select, format=format):
         for val, field in zip(row, select):
             if isinstance(field, (dimension.Level, dimension.Coordinate)):
-                yield field.dim.get_name(val)
+                if format is None:
+                    yield field.dim.name_tuple(val)
+                elif format == 'full':
+                    yield field.dim.format(field.dim.name_tuple(val))
+                elif format == 'leaf':
+                    yield field.dim.get_name(val)
             else:
                 yield val
 

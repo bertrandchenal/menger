@@ -9,13 +9,13 @@ head = lambda x: tuple(takewhile(not_none, x))
 
 KEY_CACHE = {}
 NAME_CACHE = {}
-FULL_NAME_CACHE = {}
+TUPLE_CACHE = {}
 
 def clear_dimension_cache():
-    global KEY_CACHE, NAME_CACHE, FULL_NAME_CACHE
+    global KEY_CACHE, NAME_CACHE, TUPLE_CACHE
     KEY_CACHE = {}
     NAME_CACHE = {}
-    FULL_NAME_CACHE = {}
+    TUPLE_CACHE = {}
 register('clear_cache', clear_dimension_cache)
 
 
@@ -61,7 +61,10 @@ class Dimension(object):
 
     @property
     def name_cache(self):
-        return NAME_CACHE.setdefault(self.name, {})
+        if self.name not in NAME_CACHE:
+            res = ctx.db.get_parents(self)
+            NAME_CACHE[self.name] = dict((i, (n, p)) for i, n ,p in res)
+        return NAME_CACHE[self.name]
 
     def unknow_coord(self, coord):
         from . import UserError
@@ -90,6 +93,7 @@ class Level:
 
     def __init__(self, name, depth, dim):
         self.name = name
+        self.label = name
         self.depth = depth
         self.dim = dim
 
@@ -138,8 +142,8 @@ class Tree(Dimension):
         self.closure_table = table + '_closure'
 
     @property
-    def full_name_cache(self):
-        return FULL_NAME_CACHE.setdefault(self.name, {})
+    def tuple_cache(self):
+        return TUPLE_CACHE.setdefault(self.name, {})
 
     def coord(self, value=None):
         if value is None:
@@ -179,24 +183,23 @@ class Tree(Dimension):
         return self.key_cache.get(coord)
 
     def get_name(self, coord_id):
-        if coord_id in self.full_name_cache:
-            return self.full_name_cache[coord_id]
+        return self.name_cache[coord_id][0]
 
-        if coord_id not in self.name_cache:
-            for id, name, parent in ctx.db.get_parents(self):
-                self.name_cache[id] = (name, parent)
-
-        name, parent = self.name_cache.get(coord_id, (None, None))
-        if name is None:
+    def name_tuple(self, coord_id):
+        res = self.tuple_cache.get(coord_id)
+        if res is not None:
+            return res
+        vals = self.name_cache.get(coord_id)
+        if not vals:
             return tuple()
 
-        parent_name = self.get_name(parent)
-        if parent_name:
-            res = parent_name + (name,)
+        name, parent= vals
+        leaf = (name,)
+        if parent is not None:
+            res = self.name_tuple(parent) + leaf
         else:
-            res = (name,)
-
-        self.full_name_cache[coord_id] = res
+            res = leaf
+        self.tuple_cache[coord_id] = res
         return res
 
     def create_id(self, coord):
@@ -231,7 +234,7 @@ class Tree(Dimension):
             key_depths.append([(self.key(v), len(v)) for v in values])
 
         res = ctx.db.glob(self, self.key(h), len(h), tail, key_depths)
-        return [self.get_name(child_id) for child_id, in res]
+        return [self.name_tuple(child_id) for child_id, in res]
 
     def explode(self, coord):
         if coord is None:
