@@ -3,7 +3,7 @@ import os
 import pytest
 
 from menger import dimension, Space, measure, connect
-from base_test import URI
+from .base_test import URI
 
 DATA = [
     {'version': ['2015-01'],

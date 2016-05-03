@@ -1,4 +1,4 @@
-from base_test import Cube, test_dice, dice_check, session
+from .base_test import Cube, test_dice, dice_check, session
 from menger import dimension, Space, measure
 
 

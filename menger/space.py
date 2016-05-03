@@ -161,6 +161,8 @@ class Space(metaclass=MetaSpace):
 
         if not select:
             select = cls.all_fields()
+        else:
+            select = select.copy()
 
         # Collect computed measure from the query
         for pos, field in enumerate(select):
@@ -325,17 +327,35 @@ class Space(metaclass=MetaSpace):
             fields.append(m)
         return fields
 
+    @classmethod
+    def get_attr(cls, name):
+        msg = '%s is not an attribute of %s'
+        if not hasattr(cls, name):
+            raise AttributeError( msg % (name, cls._name))
+        attr = getattr(cls, name)
+        if not isinstance(attr, (dimension.Dimension, measure.Measure)):
+            raise AttributeError(msg % (name, cls._name))
+        return attr
 
     @classmethod
     def get_dimension(cls, name):
         msg = '%s is not a dimension of %s'
         if not hasattr(cls, name):
-            raise Exception( msg % (name, cls._name))
+            raise AttributeError( msg % (name, cls._name))
         dim = getattr(cls, name)
         if not isinstance(dim, dimension.Dimension):
-            raise Exception(msg % (name, cls._name))
+            raise AttributeError(msg % (name, cls._name))
         return dim
 
+    @classmethod
+    def get_measure(cls, name):
+        msg = '%s is not a measure of %s'
+        if not hasattr(cls, name):
+            raise AttributeError( msg % (name, cls._name))
+        msr = getattr(cls, name)
+        if not isinstance(msr, measure.Measure):
+            raise AttributeError(msg % (name, cls._name))
+        return msr
 
 def get_space(name):
     return SPACES.get(name)

@@ -1,4 +1,4 @@
-from base_test import Cube, test_dice, dice_check, session, drill_check
+from .base_test import Cube, test_dice, dice_check, session, drill_check
 
 def test_reparent_leaf(session):
     Cube.place.reparent(('EU', 'BE', 'CRL'), ('EU', 'FR'))

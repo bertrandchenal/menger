@@ -10,6 +10,13 @@ from .event import register, trigger
 from .measure import Measure
 from .space import Space, build_space, get_space, iter_spaces
 
+try:
+    import pandas
+except ImportError:
+    pass
+else:
+    from . import gasket
+
 
 class UserError(Exception):
     pass

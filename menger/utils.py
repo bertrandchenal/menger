@@ -187,11 +187,10 @@ class Cli(object):
             exit("Dimension %s as no level %s" % (dim.name, name))
 
     def get_dim(self, name):
-        dim = self.get_attr(name)
-        if not isinstance(dim, Dimension):
-            exit('"%s" is not a dimension of "%s"' % (
-                dim.name, self.space._name))
-        return dim
+        try:
+            return self.space.get_dimension(name)
+        except AttributeError as e:
+            exit(e)
 
     def get_attr(self, name):
         if not hasattr(self.space, name):

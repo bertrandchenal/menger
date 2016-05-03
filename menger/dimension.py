@@ -91,9 +91,9 @@ class Dimension(object):
 
 class Level:
 
-    def __init__(self, name, depth, dim):
+    def __init__(self, name, label, depth, dim):
         self.name = name
-        self.label = name
+        self.label = label
         self.depth = depth
         self.dim = dim
 
@@ -111,9 +111,11 @@ class Tree(Dimension):
 
     def __init__(self, label, levels, type=str, alias=None):
         super(Tree, self).__init__(label, type=type, alias=alias)
+        if not isinstance(levels[0], tuple):
+            levels = [(l, l) for l in levels]
         self.levels = OrderedDict()
-        for depth, l in enumerate(levels):
-            self.levels[l] = Level(l, depth, self)
+        for depth, (name, label) in enumerate(levels):
+            self.levels[name] = Level(name, label, depth, self)
         self.depth = len(self.levels)
 
     def __getitem__(self, level_id):
