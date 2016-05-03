@@ -53,8 +53,8 @@ We can now retrieve aggregated measures with `dice`:
     # ((2012, 8, 9), ('Bill',), 523.0, 2622.0)]
 
 
-The select argument allows to select on which measure and dimension
-(and level) to dice:
+The select argument allows to select on which measures and dimensions
+(and levels) to dice:
 
     :::python
     with connect('example.db'):
@@ -187,9 +187,9 @@ A more costly query, that involve all dimensions takes around 14 seconds:
     sys0m0.980s
 
 
-Most of the time we don't need so mush depth on all dimension by
+Most of the time we don't need so mush depth on all dimensions. By
 reducing the geography dimension to the province level and by removing
-the age dimension, the same query is several order of magnitude faster:
+the age dimension, the same query is several orders of magnitude faster:
 
     $ time ./belgium.py dice year geography sex civil_status nationality --space PopulationShallow | wc
     289    1829   16118
@@ -207,7 +207,7 @@ See the tests folder for examples on the following features:
   - Versioning
   - Filter & Limit
 
-Roadmap:
+## Roadmap:
 
   - Revive Postgresql support
   - Support for ranges on scalar dimensions
