@@ -1,95 +1,37 @@
-import os
-from random import sample
-from string import ascii_letters
-
+from pprint import pprint
 from menger import measure, dimension, Space, connect
 
-class Item(Space):
-    category = dimension.Tree('Category', levels=['One', 'Two', 'Three'])
-    total = measure.Sum('Total')
-
-class NonSpace(object):
-    ignore_me = dimension.Tree('Ignore Me', levels=[])
-
-
-class Test(NonSpace, Item):
-    name = dimension.Tree('Name', levels=['Name'])
-    count = measure.Sum('Count')
+class Post(Space):
+    date = dimension.Tree('Date', ['Year', 'Month', 'Day'], int)
+    author = dimension.Tree('Author')
+    words = measure.Sum('Number of Words')
+    signs = measure.Sum('Number of Signs')
+    average = measure.Average('Average', 'signs', 'words')
 
 
-item_data = [
-    {'category': ['A', 'B', 'C'],
-     'total': 15,
-     },
+def run():
+    Post.load([
+        {'date': [2012, 7, 26],
+         'author': ['John'],
+         'words': 148,
+         'signs': 743},
+        {'date': [2012, 8, 7],
+         'author': ['John'],
+         'words': 34,
+         'signs': 145},
+        {'date': [2012, 8, 9],
+         'author': ['Bill'],
+         'words': 523,
+         'signs': 2622},
+    ])
+    print('Top-level dice')
+    pprint(list(Post.dice()))
 
-    {'category': ['A', 'B', 'D'],
-     'total': 9,
-     },
-    ]
+    print('Per Month dice')
+    pprint(list(Post.dice([Post.date['Month'], Post.average])))
 
-def test_data(nb):
-    for i in range(nb):
-        name = ''.join(sample(ascii_letters, 5))
-        yield {'category': ['A', 'B', 'C'],
-               'name': [name],
-               'count': 1,
-               'total': 7,
-               }
+    print('Date drill')
+    pprint(list(Post.date.drill((2012, 8))))
 
-def main(uri):
-    # Load and Fetch
-    with connect(uri):
-        Item.load([{'category': [], 'name': [], 'total': 1, 'amount': 1}])
-        assert next(Item.dice([], ['total'])) == ((), (1.0,))
-
-    if uri != 'sqlite:///:memory:':
-        with connect(uri):
-            assert next(Item.dice([], ['total'])) == ((), (1.0,))
-
-    # Drill
-    with connect(uri):
-        Item.load(item_data*50)
-
-        assert tuple(Item.category.drill(('A',))) == (('B'),)
-        assert tuple(Item.category.drill(('A', 'B'))) == ('C', 'D')
-        assert tuple(Item.category.drill(('A', 'B', 'C'))) == tuple()
-        cube = [('category', ('A',))]
-        assert next(Item.dice(cube, ['total'])) == ((('A',),), (24.0,))
-
-
-    # Force cache invalidation
-    nb_items = 1000
-    items = list(test_data(nb_items))
-
-    with connect(uri):
-        Test.load(items)
-        res = next(Test.dice([], ['total', 'count']))
-        _, (total, count) = res
-
-        assert total == 7 * nb_items
-        assert count == 1 * nb_items
-
-    with connect(uri):
-        for item in items:
-            Test.dice(item.items(), ['total'])
-
-if __name__ == '__main__':
-    import time
-
-    db_path = 'test.db'
-    if os.path.exists(db_path):
-        os.remove(db_path)
-
-    uris = (
-        'sqlite:///' + db_path,
-        'sqlite:///:memory:',
-        'postgresql://@/menger',
-        )
-
-    for uri in uris:
-        print('Test with %s' % uri)
-        t = time.time()
-        c = time.clock()
-        main(uri)
-        print(' done in %.3s sec (%.3f CPU sec)' % (
-            time.time() - t, (time.clock() - c)))
+with connect(':memory:'):
+    run()

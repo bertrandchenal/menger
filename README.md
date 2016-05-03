@@ -1,30 +1,8 @@
 
 # Menger
 
-Menger is an ORM-like, ISC-licensed statistics storage.
-
-Menger is designed to receive a flow of data as input and provide
-live statistics. It works by pre-computing statistics for each
-combination of possible query. So when a record like the following is
-added:
-
-    :::python
-    {'date': ['2012', '8', '17'], 'author': ["Bill"], 'nb_words': 523}
-
-the `nb_words` column is incremented by 523 in 8 lines in the
-database. They correspond to the following combination:
-
-    :::python
-    ([], [])
-    ([], ['Bill'])
-    (['2012'], [])
-    (['2012'], ['Bill'])
-    (['2012', '8'], [])
-    (['2012', '8'], ['Bill'])
-    (['2012', '8', '17'], [])
-    (['2012', '8', '17'], ['Bill'])
-
-Currently Postgresql and Sqlite are supported.
+Menger is an OLAP library written in Python and released under the ISC licence.
+Menger uses Sqlite as backend, the support for Postgresql is currently disabled
 
 
 ## Example
@@ -33,79 +11,203 @@ Let's say we want to collect statistics about the length of blog posts. We
 start by creating a `Post` class that inherits from Menger's `Space` class:
 
     :::python
+    from menger import Space, dimension, measure
+
     class Post(Space):
-
-        date = dimension.Tree('Category')
-        author = dimension.Tree('Author)
-        nb_words = measure.Sum('Number of Words')
-        nb_typos = measure.Sum('Number of Typos')
-
-A `Space` class comprises one or several dimensions and one or several
-measures.
-
-Measures aggregates values. Dimensions allows to characterise those
-aggregates.
+        date = dimension.Tree('Date', ['Year', 'Month', 'Day'], int)
+        author = dimension.Tree('Author')
+        words = measure.Sum('Number of Words')
+        signs = measure.Sum('Number of Signs')
+        average = measure.Average('Average', 'signs', 'words')
 
 
 The `load` method allows to store data points (records):
 
     :::python
-    Post.load([
-        {'date': ['2012', '7', '26'], 'author': ['John'], 'nb_words': 148, 'nb_typos': 1},
-        {'date': ['2012', '8', '7'], 'author': ['John'], 'nb_words': 34, 'nb_typos': 0},
-        {'date': ['2012', '8', '9'], 'author': ['Bill'], 'nb_words': 523, 'nb_typos': 2},
+    from menger import connect
+    with connect('example.db'):
+        Post.load([
+            {'date': [2012, 7, 26],
+             'author': ['John'],
+             'words': 148,
+             'signs': 743},
+            {'date': [2012, 8, 7],
+             'author': ['John'],
+             'words': 34,
+             'signs': 145},
+            {'date': [2012, 8, 9],
+             'author': ['Bill'],
+             'words': 523,
+             'signs': 2622},
         ])
 
 We can now retrieve aggregated measures with `dice`:
 
     :::python
-    Post.dice() # gives {'nb_words': 705, 'nb_typos': 3}
-    Post.dice(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
+    with connect('example.db'):
+        res = Post.dice()
+        print(list(res))
+    # Gives:
+    # [((2012, 7, 26), ('John',), 148.0, 743.0),
+    # ((2012, 8, 7), ('John',), 34.0, 145.0),
+    # ((2012, 8, 9), ('Bill',), 523.0, 2622.0)]
 
-Or `drill` the dimensions (i.e. get subcategories of a dimension):
+
+The select argument allows to select on which measure and dimension
+(and level) to dice:
 
     :::python
-    Post.date.drill(['2012']) # gives [('2012', '7'), ('2012', '8')]
+    with connect('example.db'):
+        res = Post.dice([Post.date['Month'], Post.average])
+        print(list(res))
+    # Gives:
+    # [((2012, 7), 5.02), ((2012, 8), 4.96)]
 
-Full code listing:
+
+The drill method allows to explore dimensions
 
     :::python
-    from menger import Space, dimension, measure
-    from menger.common import connect
+    print(list(Post.date.drill((2012, 8))))
+    # Gives: [7, 9]
 
-    class Post(Space):
+## Commnand line helper
 
-        date = dimension.Tree('Category')
-        author = dimension.Flat('Category')
-        nb_words = measure.Sum('Number of Words')
-        nb_typos = measure.Sum('Number of Typos')
+The command line helper allows to manipulate menger objects from the
+shell. After the spaces definition, simply the following to your
+script:
 
-    db_uri = 'mng.db'
-    with Post.connect(db_uri): # See menger/backend/__init__.py for uri examples
-        Post.load([
-            {'date': ['2012', '7', '26'], 'author': ['John'], 'nb_words': 148, 'nb_typos': 1},
-            {'date': ['2012', '8', '7'], 'author': ['John'], 'nb_words': 34, 'nb_typos': 0},
-            {'date': ['2012', '8', '9'], 'author': ['Bill'], 'nb_words': 523, 'nb_typos': 2},
-            ])
+    :::python
+    with connect('belgium.db'):
+        from menger import Cli
+        Cli.run()
 
-        print Post.dice({}) # gives {'nb_words': 705, 'nb_typos': 3}
-        print Post.dice(author=['John'], date=['2012', '7']) # gives {'nb_words': 148, 'nb_typos': 1}
+The following session is based on a the population for belgium between
+2010 and 2015:
 
-        print list(Post.date.drill('2012'))
+    :::bash
+    $ ./belgium.py info
+    Dimensions
+     geography  [region, province, arrondissement, commune]
+     civil_status  [status]
+     nationality  [nationality]
+     sex  [sex]
+     age  [age]
+     year  [year]
+    Measures
+     population
 
+    $ ./belgium.py drill year
+    2010
+    2011
+    2012
+    2013
+    2014
+    2015
+
+    $ ./belgium.py dice year population
+    Year Population
+    2010 10839905
+    2011 10951266
+    2012 11035948
+    2013 11099554
+    2014 11150516
+    2015 11209044
+
+
+    $ ./belgium.py dice year=2010 geography population
+    Year Geography                    Population
+    2010 Région de Bruxelles-Capitale 1089538
+    2010 Région flamande              6251983
+    2010 Région wallonne              3498384
+
+    $ ./belgium.py dice year=2015 geography[province] population
+    Year Province                                        Population
+    2015 Région de Bruxelles-Capitale/                   1175173
+    2015 Région flamande/Province de Brabant flamand     1114299
+    2015 Région flamande/Province de Flandre occidentale 1178996
+    2015 Région flamande/Province de Flandre orientale   1477346
+    2015 Région flamande/Province de Limbourg            860204
+    2015 Région flamande/Province d’Anvers               1813282
+    2015 Région wallonne/Province de Brabant wallon      393700
+    2015 Région wallonne/Province de Hainaut             1335360
+    2015 Région wallonne/Province de Liège               1094791
+    2015 Région wallonne/Province de Luxembourg          278748
+    2015 Région wallonne/Province de Namur               487145
+
+    $ ./belgium.py dice year=2015 geography="Région wallonne/*/*" population
+    Year Geography                                                                  Population
+    2015 Région wallonne/Province de Brabant wallon/Arrondissement de Nivelles      393700
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Charleroi            429854
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Mons                 257804
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Mouscron             75200
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Soignies             188389
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Thuin                151115
+    2015 Région wallonne/Province de Hainaut/Arrondissement de Tournai              146831
+    2015 Région wallonne/Province de Hainaut/Arrondissement d’Ath                   86167
+    2015 Région wallonne/Province de Liège/Arrondissement de Huy                    111839
+    2015 Région wallonne/Province de Liège/Arrondissement de Liège                  618887
+    2015 Région wallonne/Province de Liège/Arrondissement de Verviers               285214
+    2015 Région wallonne/Province de Liège/Arrondissement de Waremme                78851
+    2015 Région wallonne/Province de Luxembourg/Arrondissement de Bastogne          46857
+    2015 Région wallonne/Province de Luxembourg/Arrondissement de Marche-en-Famenne 55857
+    2015 Région wallonne/Province de Luxembourg/Arrondissement de Neufchâteau       62099
+    2015 Région wallonne/Province de Luxembourg/Arrondissement de Virton            53279
+    2015 Région wallonne/Province de Luxembourg/Arrondissement d’Arlon              60656
+    2015 Région wallonne/Province de Namur/Arrondissement de Dinant                 108941
+    2015 Région wallonne/Province de Namur/Arrondissement de Namur                  311684
+    2015 Région wallonne/Province de Namur/Arrondissement de Philippeville          66520
+
+
+## Performance
+
+The population dataset contains `2,705,776` lines, a common query take
+around 5 seconds on a modest Intel Core M:
+
+    $ time ./belgium.py dice year population > /dev/null
+
+    real0m5.841s
+    user0m5.752s
+    sys0m0.612s
+
+    $ time ./belgium.py dice year=2015 geography="Région wallonne/*/*" population > /dev/null
+
+    real 0m5.133s
+    sys 0m4.904s
+    user 0m0.752s
+
+
+A more costly query, that involve all dimensions takes around 14 seconds:
+
+    :::bash
+    $ time ./belgium.py dice year geography age sex civil_status nationality | wc
+    24224  177591 1447930
+
+    real0m14.098s
+    user0m13.664s
+    sys0m0.980s
+
+
+Most of the time we don't need so mush depth on all dimension by
+reducing the geography dimension to the province level and by removing
+the age dimension, the same query is several order of magnitude faster:
+
+    $ time ./belgium.py dice year geography sex civil_status nationality --space PopulationShallow | wc
+    289    1829   16118
+
+    real0m0.682s
+    user0m0.732s
+    sys0m0.472s
+
+
+## Documentation TODO
+
+See the tests folder for examples on the following features:
+
+  - Snapshots
+  - Versioning
+  - Filter & Limit
 
 Roadmap:
 
- - Think about passing format function as a param to the dimension
-   constructor (instead of adding them on the class)
- - Change `dice` api to not accept coord like `('Fixed parent', None ,
-   None)` but use something like `(dim, parent_key, depth)` (and so
-   bypass the cube building step). Or even something more advanced like:
-
-       `(dim, (('drill', parent_key, depth), ('ilike', 'Pattern*')))`
-
-   and get rid of the `filters` argument on the `dice` method.
- - Implement garbage collection on dimensions: Delete any record in a
-   dimension table (and the associate closure) for which there are no
-   data in the main table.
- - Rename s/Space/Cube/g
+  - Revive Postgresql support
+  - Support for ranges on scalar dimensions
