@@ -165,14 +165,14 @@ around 5 seconds on a modest Intel Core M:
 
     $ time ./belgium.py dice year population > /dev/null
 
-    real0m5.841s
-    user0m5.752s
-    sys0m0.612s
+    real 0m5.841s
+    user 0m5.752s
+    sys  0m0.612s
 
     $ time ./belgium.py dice year=2015 geography="Région wallonne/*/*" population > /dev/null
 
     real 0m5.133s
-    sys 0m4.904s
+    sys  0m4.904s
     user 0m0.752s
 
 
@@ -182,9 +182,9 @@ A more costly query, that involve all dimensions takes around 14 seconds:
     $ time ./belgium.py dice year geography age sex civil_status nationality | wc
     24224  177591 1447930
 
-    real0m14.098s
-    user0m13.664s
-    sys0m0.980s
+    real  0m14.098s
+    user  0m13.664s
+    sys0m 0.980s
 
 
 Most of the time we don't need so mush depth on all dimensions. By
@@ -194,9 +194,9 @@ the age dimension, the same query is several orders of magnitude faster:
     $ time ./belgium.py dice year geography sex civil_status nationality --space PopulationShallow | wc
     289    1829   16118
 
-    real0m0.682s
-    user0m0.732s
-    sys0m0.472s
+    real 0m0.682s
+    user 0m0.732s
+    sys  0m0.472s
 
 
 ## Documentation TODO
