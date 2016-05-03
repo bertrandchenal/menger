@@ -109,10 +109,13 @@ class Tree(Dimension):
 
     '''
 
-    def __init__(self, label, levels, type=str, alias=None):
+    def __init__(self, label, levels=None, type=str, alias=None):
         super(Tree, self).__init__(label, type=type, alias=alias)
-        if not isinstance(levels[0], tuple):
+        if not levels:
+            levels = [(label, label)]
+        elif not isinstance(levels[0], tuple):
             levels = [(l, l) for l in levels]
+
         self.levels = OrderedDict()
         for depth, (name, label) in enumerate(levels):
             self.levels[name] = Level(name, label, depth, self)
