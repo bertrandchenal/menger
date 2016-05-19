@@ -79,7 +79,9 @@ def dice(query):
         if data is None:
             data = spc_data
         else:
-            data = data.merge(spc_data, on=idx)
+            suffixes = [' - %s' % s._label for s in (space, prev_space)]
+            data = data.merge(spc_data, on=idx, suffixes=suffixes)
+        prev_space = space
 
     pivot = query.get('pivot_on')
     if pivot is not None and len(dims) > 1:
