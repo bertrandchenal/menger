@@ -86,6 +86,19 @@ def dice(query):
     pivot = query.get('pivot_on')
     if pivot is not None and len(dims) > 1:
         data = data.set_index(idx).unstack(pivot)
-        data.columns = data.columns.swaplevel(0, -1)
-        data = data.sortlevel(0, axis=1)
-    return data.iloc[:query.get('limit')]
+        data.reset_index(inplace=True)
+        headers = list(zip(*list(data.columns.values)))
+    else:
+        headers = [list(data.columns.values)]
+
+    # Hide empty lines
+    if query.get('skip_zero'):
+        data.dropna(how='all', inplace=True)
+
+    # Replace NaN's with zero
+    data.fillna(0, inplace=True)
+
+    return {
+        'data': data.iloc[:query.get('limit')],
+        'headers': headers,
+    }

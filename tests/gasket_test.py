@@ -35,7 +35,7 @@ def test_alone(session):
     query = {
         'select': ['cube.total', 'cube.count', 'cube.average'],
     }
-    check_data = gasket.dice(query)
+    check_data = gasket.dice(query)['data']
     check_data = [tuple(row) for row in check_data.values]
     assert ref_data == check_data
 
@@ -49,7 +49,7 @@ def test_alone(session):
             'select': ['place[Country]', 'cube.count'],
             'format': fmt,
         }
-        check_data = gasket.dice(query)
+        check_data = gasket.dice(query)['data']
         check_data = [tuple(row) for row in check_data.values]
         assert ref_data == check_data
 
@@ -61,7 +61,7 @@ def test_multi(session):
         'select': ['place', 'cube.count', 'anothercube.other_count',
                    'cube.total', 'anothercube.other_total'],
     }
-    check_data = gasket.dice(query)
+    check_data = gasket.dice(query)['data']
     count_check = check_data['Count'] == check_data['Other Count']
     assert count_check.all()
 
@@ -75,7 +75,7 @@ def test_pivot(session):
         'pivot_on': ['Day'],
         'format': 'leaf'
     }
-    check_data = gasket.dice(query).reset_index()
+    check_data = gasket.dice(query)['data'].reset_index()
     assert all(check_data['Place'].values == ['EU', 'USA'])
 
 
@@ -87,11 +87,11 @@ def test_limit(session):
     }
 
     query['limit'] = 3
-    check_data = gasket.dice(query)
+    check_data = gasket.dice(query)['data']
     assert len(check_data) == 3
 
     query['limit'] = 10
-    check_data = gasket.dice(query)
+    check_data = gasket.dice(query)['data']
     assert len(check_data) == 4
 
 
@@ -103,5 +103,5 @@ def test_filter(session):
         'filters': [('place', [('EU', 'BE')])],
     }
 
-    check_data = gasket.dice(query)
+    check_data = gasket.dice(query)['data']
     assert all(check_data['City'].values == ['BRU', 'CRL'])
