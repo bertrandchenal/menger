@@ -13,6 +13,8 @@ def dice_by_spc(space, select, filters=None, format='leaf'):
     filters = filters or []
     columns = [s.label for s in select]
     res = space.dice(select, filters, format=format)
+    # TODO add an iterator on res that will raise LimitException if
+    # the result gets to large
     df = DataFrame.from_records(res, columns=columns)
     return df
 
