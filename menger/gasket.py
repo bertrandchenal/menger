@@ -51,6 +51,13 @@ def dice(query):
                 raise AttributeError(msg)
             name, level = groups
             dim = main_spc.get_dimension(name)
+
+            # getitem on dimension also support integers
+            try:
+                level = int(level)
+            except ValueError:
+                pass
+
             attr = dim[level]
         else:
             attr = main_spc.get_dimension(name)
