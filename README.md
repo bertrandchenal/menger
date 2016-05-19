@@ -187,7 +187,7 @@ A more costly query, that involve all dimensions takes around 14 seconds:
     sys0m 0.980s
 
 
-Most of the time we don't need so mush depth on all dimensions. By
+Most of the time we don't need so much depth on all dimensions. By
 reducing the geography dimension to the province level and by removing
 the age dimension, the same query is several orders of magnitude faster:
 
