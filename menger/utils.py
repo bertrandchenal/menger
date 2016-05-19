@@ -48,7 +48,7 @@ class Cli(object):
             else:
                 select.append(attr)
 
-        # Force at least one dimesion
+        # Force at least one dimension
         if not select:
             first = self.space._dimensions[0][0]
             select.append(first)
