@@ -206,6 +206,7 @@ See the tests folder for examples on the following features:
   - Snapshots
   - Versioning
   - Filter & Limit
+  - Gasket
 
 ## Roadmap:
 
