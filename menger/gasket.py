@@ -97,8 +97,8 @@ def dice(query):
 
     # Replace NaN's with zero
     data.fillna(0, inplace=True)
-
+    sort_by = list(data.columns.values)
     return {
-        'data': data.iloc[:query.get('limit')],
+        'data': data.iloc[:query.get('limit')].sort_values(sort_by),
         'headers': headers,
     }
