@@ -22,22 +22,27 @@ class SqliteBackend(SqlBackend):
 
         self.connection = sqlite3.connect(path, uri=uri)
         self.cursor = self.connection.cursor()
-        self.cursor.execute('PRAGMA journal_mode=WAL')
-        self.cursor.execute('PRAGMA foreign_keys=1')
+        self.execute('PRAGMA journal_mode=WAL')
+        self.execute('PRAGMA foreign_keys=1')
         self.nb_tmp = 0
 
         super(SqliteBackend, self).__init__()
 
+    def execute(self, query, args=None):
+        if args is not None:
+            return self.cursor.execute(query, args)
+        return self.cursor.execute(query)
+
     def register(self, space):
         for dim in space._dimensions:
             # Dimension table
-            self.cursor.execute(
+            self.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ( '
                 'id INTEGER PRIMARY KEY, '
                 'name %s)' % (dim.table, dim.sql_type))
 
             # Closure table for the dimension
-            self.cursor.execute(
+            self.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ('
                 'parent INTEGER REFERENCES "%s" (id) '
                   'ON DELETE CASCADE NOT NULL, '
@@ -46,7 +51,7 @@ class SqliteBackend(SqlBackend):
                 'depth INTEGER)' % (dim.closure_table, dim.table,
                                     dim.table))
 
-            self.cursor.execute(
+            self.execute(
                 'CREATE INDEX IF NOT EXISTS %s_idx '
                 'ON %s (parent, depth)' % (dim.closure_table, dim.closure_table)
             )
@@ -61,10 +66,10 @@ class SqliteBackend(SqlBackend):
         ))
         query = 'CREATE TABLE IF NOT EXISTS "%s" (%s)' % (
             space._table, cols)
-        self.cursor.execute(query)
+        self.execute(query)
 
         # Create index covering all dimensions
-        self.cursor.execute(
+        self.execute(
             'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index ON "%s" (%s)' % (
                 space._table,
                 space._table,
@@ -74,7 +79,7 @@ class SqliteBackend(SqlBackend):
 
         # Clean old (weak) indexes
         for d in space._dimensions:
-            self.cursor.execute(
+            self.execute(
                 'DROP INDEX IF EXISTS %s_%s_index' % (
                     space._table,
                     d.name,
@@ -113,13 +118,13 @@ class SqliteBackend(SqlBackend):
         # TODO check for equivalent in postgresql
         nb_edit = super(SqliteBackend, self).load(
             space, keys_vals, load_type=load_type)
-        self.cursor.execute('VACUUM')
-        self.cursor.execute('ANALYZE')
+        self.execute('VACUUM')
+        self.execute('ANALYZE')
         return nb_edit
 
     def create_coordinate(self, dim, name, parent_id=None):
         # Fill dimension table
-        self.cursor.execute(
+        self.execute(
             'INSERT into %s (name) VALUES (?)' % dim.table, (name,))
         last_id = self.cursor.lastrowid
 
@@ -128,16 +133,16 @@ class SqliteBackend(SqlBackend):
         stm = 'INSERT INTO "%(cls)s" (parent, child, depth) '\
               'SELECT parent, ? as child, depth+1 FROM "%(cls)s" ' \
               'WHERE child = ?' % {'cls': dim.closure_table}
-        self.cursor.execute(stm, (last_id, parent_id))
+        self.execute(stm, (last_id, parent_id))
 
         # Add self reference
         stm = 'INSERT INTO "%(cls)s" (parent, child, depth) '\
               'VALUES (?, ?, ?)' % {'cls': dim.closure_table}
-        self.cursor.execute(stm, (last_id, last_id, 0))
+        self.execute(stm, (last_id, last_id, 0))
         return last_id
 
     def delete_coordinate(self, dim, coord_id):
-        self.cursor.execute(
+        self.execute(
             'DELETE FROM %(dim)s WHERE id IN '
             '(SELECT CHILD FROM %(cls)s WHERE parent = ?)' % {
                 'dim': dim.table,
@@ -152,7 +157,7 @@ class SqliteBackend(SqlBackend):
         cls = dim.closure_table
 
         # Detach child
-        self.cursor.execute(
+        self.execute(
             'DELETE FROM %s '
             'WHERE child IN (SELECT child FROM %s where parent = ?) '
             'AND parent NOT IN (SELECT child FROM %s WHERE parent = ?)' % (
@@ -162,7 +167,7 @@ class SqliteBackend(SqlBackend):
         )
 
         # Set new parent
-        self.cursor.execute(
+        self.execute(
             'SELECT supertree.parent, subtree.child, '
             'supertree.depth + subtree.depth + 1 '
             'FROM %s AS supertree JOIN %s AS subtree '
@@ -186,7 +191,7 @@ class SqliteBackend(SqlBackend):
         '''
 
         # Find ids to merge
-        self.cursor.execute(
+        self.execute(
             'SELECT name, min(child), max(child), count(*) as cnt '
             'FROM "%(cls)s" '
             'JOIN "%(dim)s" ON (child = id) '
@@ -197,7 +202,7 @@ class SqliteBackend(SqlBackend):
             }, (parent_id,))
 
         for name, id_min, id_max, cnt in self.cursor:
-            self.cursor.execute(
+            self.execute(
                 'UPDATE "%(cls)s" SET parent = ? WHERE parent = ?' % {
                 'cls': dim.closure_table,
             }, (id_min, id_max))
@@ -215,7 +220,7 @@ class SqliteBackend(SqlBackend):
                     else:
                         select_cols.append(spc_dim.name)
                 select_cols.extend(m.name for m in  space._db_measures)
-                self.cursor.execute(
+                self.execute(
                     'SELECT %(select_cols)s FROM "%(spc)s" '
                     'WHERE %(col)s = ?' % {
                         'spc': space._table,
@@ -229,14 +234,14 @@ class SqliteBackend(SqlBackend):
                 self.load(space, data, load_type=LoadType.increment)
 
                 # Delete obsoleted lines
-                self.cursor.execute(
+                self.execute(
                     'DELETE FROM "%(spc)s" WHERE %(col)s = ?' % {
                         'spc': space._table,
                         'col': dim.name,
                     }, (id_max,))
 
             # Clean old records
-            self.cursor.execute(
+            self.execute(
                 'DELETE FROM "%(dim)s" WHERE id = ?' % {
                 'dim': dim.table,
             }, (id_max,))
@@ -249,7 +254,7 @@ class SqliteBackend(SqlBackend):
         '''
         Will delete the given node if no children are found
         '''
-        self.cursor.execute(
+        self.execute(
             'SELECT count(*) FROM %(cls)s '
             'WHERE parent = ? and depth = 1' % {'cls': dim.closure_table},
             (parent_id,)
@@ -258,11 +263,11 @@ class SqliteBackend(SqlBackend):
         if cnt > 0:
             return
 
-        self.cursor.execute('DELETE FROM %s WHERE id = ?' % dim.table,
+        self.execute('DELETE FROM %s WHERE id = ?' % dim.table,
                             (parent_id,))
 
     def rename(self, dim, record_id, new_name):
-        self.cursor.execute('UPDATE %s SET name = ? WHERE id = ?' % dim.table,
+        self.execute('UPDATE %s SET name = ? WHERE id = ?' % dim.table,
                             (new_name, record_id)
         )
 
@@ -276,14 +281,14 @@ class SqliteBackend(SqlBackend):
                 'WHERE c.depth = ? AND c.parent = ?' % (
                     dim.closure_table, dim.table)
             args = (depth, parent_id)
-        res = list(self.cursor.execute(stm, args))
+        res = list(self.execute(stm, args))
         return res
 
     def get_parents(self, dim):
         stm = 'SELECT id, name, parent FROM "%s"'\
             ' JOIN %s ON (child = id) WHERE depth = 1'\
             %(dim.table, dim.closure_table)
-        self.cursor.execute(stm)
+        self.execute(stm)
         return self.cursor.fetchall()
 
     def dice_query(self, space, fields, filters=None):
@@ -356,7 +361,7 @@ class SqliteBackend(SqlBackend):
 
     def dice(self, space, fields, filters=[]):
         stm, params = self.dice_query(space, fields, filters)
-        self.cursor.execute(stm, params)
+        self.execute(stm, params)
         res = self.cursor.fetchall()
         return res
 
@@ -389,7 +394,7 @@ class SqliteBackend(SqlBackend):
                     'tmp': tt,
                     'cond': cond
                 }
-                self.cursor.execute(qr % params)
+                self.execute(qr % params)
 
         return tmp_tables, joins
 
@@ -398,7 +403,7 @@ class SqliteBackend(SqlBackend):
         qr = 'CREATE TEMPORARY table %s ('\
              'parent INTEGER, child INTEGER, depth INTEGER'\
              ')' % alias
-        self.cursor.execute(qr)
+        self.execute(qr)
 
         # Fill it
         if depth is None:
@@ -427,7 +432,7 @@ class SqliteBackend(SqlBackend):
                 'tmp': alias,
                 'subselect': subselect,
             }
-        self.cursor.execute(qr % params)
+        self.execute(qr % params)
 
         # Build join expression
         join = 'JOIN %(tmp)s ON (%(tmp)s.child = "%(spc)s"."%(dim)s")'
@@ -449,7 +454,7 @@ class SqliteBackend(SqlBackend):
                 conditions.append(cond)
         if conditions:
             query +=  ' WHERE ' + ' AND '.join(conditions)
-        self.cursor.execute(query)
+        self.execute(query)
 
     def snapshot(self, space, other_space, select, filters, to_delete):
         # Delete existing data
@@ -459,7 +464,7 @@ class SqliteBackend(SqlBackend):
         dice_stm , dice_params = self.dice_query(space, select, filters)
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
-        self.cursor.execute(stm, dice_params)
+        self.execute(stm, dice_params)
 
     def glob(self, dim, parent_id, parent_depth, values, filters=[]):
         depth = len(values)
@@ -519,14 +524,14 @@ class SqliteBackend(SqlBackend):
         if conditions:
             query += ' AND ' + ' AND '.join(conditions)
 
-        self.cursor.execute(query % format_args, query_args)
+        self.execute(query % format_args, query_args)
         return self.cursor.fetchall()
 
     def close(self, rollback=False):
         # Remove previous tmp tables if any
         for i in range(self.nb_tmp): # FIXME will fail with multi-threads
             table = 'tmp_%s' % i
-            self.cursor.execute('DROP TABLE %s' % table)
+            self.execute('DROP TABLE %s' % table)
         self.nb_tmp = 0
 
         if rollback:
@@ -539,19 +544,19 @@ class SqliteBackend(SqlBackend):
     def get_columns_info(self, name):
         name = name + '_spc'
         stm = 'PRAGMA foreign_key_list("%s")'
-        fk = set(x[3] for x in self.cursor.execute(stm % name))
+        fk = set(x[3] for x in self.execute(stm % name))
 
         stm = 'PRAGMA table_info("%s")'
-        self.cursor.execute(stm % name)
+        self.execute(stm % name)
         for space_info in list(self.cursor):
             col_name = space_info[1]
             col_type = space_info[2].lower()
             if col_name in fk:
-                self.cursor.execute('SELECT max(depth) from %s' % (
+                self.execute('SELECT max(depth) from %s' % (
                     col_name + '_closure'))
                 depth, = next(self.cursor)
 
-                self.cursor.execute(stm % (col_name + '_dim'))
+                self.execute(stm % (col_name + '_dim'))
                 for dim_info in self.cursor:
                     dim_col = dim_info[1]
                     dim_type = dim_info[2].lower()
@@ -579,4 +584,4 @@ class SqliteBackend(SqlBackend):
                     }
             args = ('%' + substring + '%', max_depth)
 
-        return self.cursor.execute(query, args)
+        return self.execute(query, args)
