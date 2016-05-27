@@ -1,4 +1,5 @@
 from collections import defaultdict
+import locale
 import re
 
 from pandas import DataFrame
@@ -39,6 +40,8 @@ def dice(query):
             if main_spc is None:
                 main_spc = get_space(spc)
             msr = get_space(spc).get_measure(name)
+            if msr in msr_group[spc]:
+                continue
             msr_group[spc].append(msr)
             continue
 
@@ -61,6 +64,8 @@ def dice(query):
             attr = dim[level]
         else:
             attr = main_spc.get_dimension(name)
+        if attr in dims:
+            continue
         dims.append(attr)
         idx.append(attr.label)
 
@@ -74,8 +79,8 @@ def dice(query):
     format = query.get('format')
     for spc, msrs in msr_group.items():
         space = get_space(spc)
-        spc_data = dice_by_spc(space, dims + msrs,
-                               filters=filters, format=format)
+        select = dims + msrs
+        spc_data = dice_by_spc(space, select, filters=filters, format=format)
         if data is None:
             data = spc_data
         else:
@@ -83,6 +88,7 @@ def dice(query):
             data = data.merge(spc_data, on=idx, suffixes=suffixes)
         prev_space = space
 
+    # Pivot dataframe
     pivot = query.get('pivot_on')
     if pivot is not None and len(dims) > 1:
         data = data.set_index(idx).unstack(pivot)
@@ -94,11 +100,34 @@ def dice(query):
     # Hide empty lines
     if query.get('skip_zero'):
         data.dropna(how='all', inplace=True)
-
     # Replace NaN's with zero
     data.fillna(0, inplace=True)
+
+    # Apply limit & sort
     sort_by = list(data.columns.values)
+    ascending = True
+    if query.get('sort_by'):
+        sort_pos, direction = query['sort_by']
+        sort_pos = min(sort_pos, len(sort_by) - 1)
+        sort_by.insert(0, sort_by.pop(sort_pos))
+        ascending = direction == 'asc'
+    data = data.sort_values(sort_by, ascending=ascending)
+    data = data.iloc[:query.get('limit')]
+
+    # Format measures
+    by_labels = {f.label: f for f in msrs}
+    if pivot is not None:
+        for column in data.columns.values:
+            field = by_labels.get(column[0])
+            if field is None:
+                continue
+            data[column] = data[column].apply(field.format)
+    else:
+        for mpos, m in enumerate(msrs):
+            pos = mpos + len(dims)
+            data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
+
     return {
-        'data': data.iloc[:query.get('limit')].sort_values(sort_by),
+        'data': data,
         'headers': headers,
     }
