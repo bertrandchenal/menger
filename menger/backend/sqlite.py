@@ -20,6 +20,7 @@ class SqliteBackend(SqlBackend):
         else:
             uri=False
 
+        self.readonly = readonly
         self.connection = sqlite3.connect(path, uri=uri)
         self.cursor = self.connection.cursor()
         self.execute('PRAGMA journal_mode=WAL')
@@ -33,7 +34,11 @@ class SqliteBackend(SqlBackend):
             return self.cursor.execute(query, args)
         return self.cursor.execute(query)
 
-    def register(self, space):
+    def init_tables(self, space):
+        if space._name in self.init_done:
+            return
+        self.init_done.add(space._name)
+
         for dim in space._dimensions:
             # Dimension table
             self.execute(
@@ -86,32 +91,41 @@ class SqliteBackend(SqlBackend):
                     )
                 )
 
+    def register(self, space):
+        if not self.readonly:
+            self.init_tables(space)
+
+        # If the space is already known, nothing to do
+        if space._name in self.stm:
+            return
+
+        stm_dict = self.stm[space._name]
         measures = [m.name for m in space._db_measures]
         dimensions = [d.name for d in space._dimensions]
 
-        # get_stm
+        # get statement
         select = ', '.join(measures)
         dim_where = 'WHERE ' + ' AND '.join('"%s" = ?' % d for d in dimensions)
-        self.get_stm[space._name] = 'SELECT %s FROM "%s" %s' % (
+        stm_dict['get'] = 'SELECT %s FROM "%s" %s' % (
             select, space._table, dim_where)
 
-        # update_stm
+        # update statement
         set_stm = ', '.join('"%s" = ?' % m for m in measures)
         clause = ' and '.join('"%s" = ?' % d for d in dimensions)
-        self.update_stm[space._name] = 'UPDATE "%s" SET %s WHERE %s' % (
+        stm_dict['update'] = 'UPDATE "%s" SET %s WHERE %s' % (
             space._table, set_stm, clause)
 
-        #insert_stm
+        #insert statement
         fields = tuple(chain(dimensions, measures))
 
         val_stm = ', '.join('?' for f in fields)
         field_stm = ', '.join(fields)
-        self.insert_stm[space._name] = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
+        stm_dict['insert'] = 'INSERT INTO "%s" (%s) VALUES (%s)' % (
             space._table, field_stm, val_stm)
 
-        #delete_stm
+        #delete statement
         cond_stm = ' AND '.join('%s = ?' % d for d in dimensions)
-        self.delete_stm[space._name] = 'DELETE FROM "%s" WHERE %s' % (
+        stm_dict['delete'] = 'DELETE FROM "%s" WHERE %s' % (
             space._table, cond_stm)
 
     def load(self, space, keys_vals, load_type=None):

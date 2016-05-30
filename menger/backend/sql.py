@@ -1,3 +1,4 @@
+from collections import defaultdict
 from enum import Enum
 from itertools import tee
 from operator import add
@@ -12,10 +13,8 @@ class LoadType(Enum):
 class SqlBackend(BaseBackend):
 
     def __init__(self):
-        self.get_stm = {}
-        self.insert_stm = {}
-        self.update_stm = {}
-        self.delete_stm = {}
+        self.init_done = set()
+        self.stm = defaultdict(dict)
 
     def load(self, space, keys_vals, load_type=None):
         nb_edit = 0
@@ -36,19 +35,19 @@ class SqlBackend(BaseBackend):
         return nb_edit
 
     def get(self, space, key):
-        self.cursor.execute(self.get_stm[space._name], key)
+        self.cursor.execute(self.stm[space._name]['get'], key)
         return self.cursor.fetchone()
 
     def update(self, space, key, vals):
         if any(vals):
-            self.cursor.execute(self.update_stm[space._name], vals + key)
+            self.cursor.execute(self.stm[space._name]['update'], vals + key)
         else:
             # Delete row of all values are zero
-            self.cursor.execute(self.delete_stm[space._name], key)
+            self.cursor.execute(self.stm[space._name]['delete'], key)
 
     def insert(self, space, key, vals):
         if not any(vals):
             # Skip if all values are zero
             return
-        self.cursor.execute(self.insert_stm[space._name], key + vals)
+        self.cursor.execute(self.stm[space._name]['insert'], key + vals)
 
