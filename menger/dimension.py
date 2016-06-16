@@ -48,6 +48,7 @@ class Dimension(object):
         self.name = name
         table = (self.alias or self.name).lower()
         self.table = table + '_dim'
+        self.closure_table = table + '_cls'
 
     def expand(self, values):
         return values
