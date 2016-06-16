@@ -144,7 +144,7 @@ class Tree(Dimension):
     def set_name(self, name):
         super(Tree, self).set_name(name)
         table = (self.alias or self.name).lower()
-        self.closure_table = table + '_closure'
+        self.closure_table = table + '_cls'
 
     @property
     def tuple_cache(self):

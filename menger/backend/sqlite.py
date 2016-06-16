@@ -567,7 +567,7 @@ class SqliteBackend(SqlBackend):
             col_type = space_info[2].lower()
             if col_name in fk:
                 self.execute('SELECT max(depth) from %s' % (
-                    col_name + '_closure'))
+                    col_name + '_cls'))
                 depth, = next(self.cursor)
 
                 self.execute(stm % (col_name + '_dim'))
