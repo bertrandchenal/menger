@@ -10,10 +10,10 @@ from . import get_space
 LEVEL_RE = re.compile('^(.+)\[(.+)\]$')
 
 
-def dice_by_spc(space, select, filters=None, format='leaf'):
+def dice_by_spc(space, select, filters=None, dim_fmt='leaf'):
     filters = filters or []
     columns = [s.label for s in select]
-    res = space.dice(select, filters, format=format)
+    res = space.dice(select, filters, dim_fmt=dim_fmt)
     # TODO add an iterator on res that will raise LimitException if
     # the result gets to large
     df = DataFrame.from_records(res, columns=columns)
@@ -76,11 +76,11 @@ def dice(query):
         filters.extend(cond)
 
     data = None
-    format = query.get('format')
+    dim_fmt = query.get('dim_fmt')
     for spc, msrs in msr_group.items():
         space = get_space(spc)
         select = dims + msrs
-        spc_data = dice_by_spc(space, select, filters=filters, format=format)
+        spc_data = dice_by_spc(space, select, filters=filters, dim_fmt=dim_fmt)
         if data is None:
             data = spc_data
         else:
@@ -114,18 +114,21 @@ def dice(query):
     data = data.sort_values(sort_by, ascending=ascending)
     data = data.iloc[:query.get('limit')]
 
-    # Format measures
-    by_labels = {f.label: f for f in msrs}
-    if pivot is not None:
-        for column in data.columns.values:
-            field = by_labels.get(column[0])
-            if field is None:
-                continue
-            data[column] = data[column].apply(field.format)
-    else:
-        for mpos, m in enumerate(msrs):
-            pos = mpos + len(dims)
-            data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
+    # We did pass measure formating to space.dice to make above sort
+    # works, so we do it now
+    msr_fmt = query.get('msr_fmt')
+    if msr_fmt:
+        by_labels = {f.label: f for f in msrs}
+        if pivot is not None:
+            for column in data.columns.values:
+                field = by_labels.get(column[0])
+                if field is None:
+                    continue
+                data[column] = data[column].apply(field.format)
+        else:
+            for mpos, m in enumerate(msrs):
+                pos = mpos + len(dims)
+                data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
 
     return {
         'data': data,

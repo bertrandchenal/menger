@@ -154,7 +154,7 @@ class Space(metaclass=MetaSpace):
         return True
 
     @classmethod
-    def dice(cls, select=[], filters=[], format=None):
+    def dice(cls, select=[], filters=[], dim_fmt=None, msr_fmt=None):
         fn_msr = defaultdict(list)
         msr_idx = {}
         xtr_msr = []
@@ -220,7 +220,7 @@ class Space(metaclass=MetaSpace):
 
         # Returns rows
         for row in rows:
-            row = tuple(cls.get_names(row, select, format=format))
+            row = tuple(cls.format(row, select, dim_fmt=dim_fmt))
             if not fn_msr:
                 yield row
                 continue
@@ -250,17 +250,20 @@ class Space(metaclass=MetaSpace):
             yield row
 
     @classmethod
-    def get_names(cls, row, select, format=format):
+    def format(cls, row, select, dim_fmt=None, msr_fmt=None):
         for val, field in zip(row, select):
             if isinstance(field, (dimension.Level, dimension.Coordinate)):
-                if format is None:
+                if dim_fmt is None:
                     yield field.dim.name_tuple(val)
-                elif format == 'full':
+                elif dim_fmt == 'full':
                     yield field.dim.format(field.dim.name_tuple(val))
-                elif format == 'leaf':
+                elif dim_fmt == 'leaf':
                     yield field.dim.get_name(val)
             else:
-                yield val
+                if msr_fmt is None:
+                    yield val
+                else:
+                    yield field.format(val) # TODO pass msr_fmt as argument
 
     @staticmethod
     def merge_computed_measures(values, fn_vals):

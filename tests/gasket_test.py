@@ -44,10 +44,10 @@ def test_alone(session):
         ref_data = list(Cube.dice([
             Cube.place['Country'],
             Cube.count
-        ], format=fmt))
+        ], dim_fmt=fmt))
         query = {
             'select': ['place[Country]', 'cube.count'],
-            'format': fmt,
+            'dim_fmt': fmt,
         }
         check_data = gasket.dice(query)['data']
         check_data = [tuple(row) for row in check_data.values]
@@ -73,7 +73,7 @@ def test_pivot(session):
     query = {
         'select': ['date[Day]', 'place', 'cube.count'],
         'pivot_on': ['Day'],
-        'format': 'leaf'
+        'dim_fmt': 'leaf',
     }
     check_data = gasket.dice(query)['data'].reset_index()
     assert all(check_data['Place'].values == ['EU', 'USA'])
@@ -83,7 +83,7 @@ def test_limit(session):
     # Test only measures
     query = {
         'select': ['place[City]', 'cube.total'],
-        'format': 'full',
+        'dim_fmt': 'full',
     }
 
     query['limit'] = 3
@@ -99,7 +99,7 @@ def test_filter(session):
     # Test only measures
     query = {
         'select': ['place[City]', 'cube.total'],
-        'format': 'leaf',
+        'dim_fmt': 'leaf',
         'filters': [('place', [('EU', 'BE')])],
     }
 
