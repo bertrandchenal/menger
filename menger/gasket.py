@@ -117,8 +117,8 @@ def dice(query):
     # We did pass measure formating to space.dice to make above sort
     # works, so we do it now
     msr_fmt = query.get('msr_fmt')
+    by_labels = {f.label: f for f in msrs}
     if msr_fmt:
-        by_labels = {f.label: f for f in msrs}
         if pivot is not None:
             for column in data.columns.values:
                 field = by_labels.get(column[0])
@@ -130,7 +130,21 @@ def dice(query):
                 pos = mpos + len(dims)
                 data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
 
+    totals = [''] * len(data.columns)
+    if pivot is not None:
+        for pos, column in enumerate(data.columns.values):
+            field = by_labels.get(column[0])
+            if field is None:
+                continue
+            totals[pos] = field.format(data.iloc[:, pos].sum())
+
+    else:
+        for mpos, m in enumerate(msrs):
+            pos = mpos + len(dims)
+            totals[pos] = m.format(data.iloc[:, pos].sum())
+
     return {
         'data': data,
         'headers': headers,
+        'totals': totals,
     }
