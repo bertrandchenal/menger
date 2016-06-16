@@ -86,7 +86,7 @@ class Dimension(object):
             return None
         return self.create_id(coord)
 
-    def __str__(self):
+    def __repr__(self):
         return '<Dimension %s>' % self.name
 
 class Level:
@@ -97,7 +97,7 @@ class Level:
         self.depth = depth
         self.dim = dim
 
-    def __str__(self):
+    def __repr__(self):
         return '<Level %s on %s (depth: %s)>' % (
             self.name, self.dim.name, self.depth)
 
@@ -328,5 +328,5 @@ class Coordinate:
     def key(self):
         return self.dim.key(self.value)
 
-    def __str__(self):
+    def __repr__(self):
         return '<Coordinate %s %s>' % (self.dim.name, self.value)
