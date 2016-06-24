@@ -504,8 +504,10 @@ class SqliteBackend(SqlBackend):
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
         self.execute(stm, dice_params)
+        return self.size(other_space)
 
-        qr = 'SELECT count(*) FROM %s' % other_space._table
+    def size(self, spc):
+        qr = 'SELECT count(*) FROM %s' % spc._table
         cnt, = self.execute(qr).fetchone()
         return cnt
 
@@ -629,11 +631,14 @@ class SqliteBackend(SqlBackend):
 
         return self.execute(query, args)
 
-    def get_profiles(self, spc):
+    def get_profiles(self, spc, sort_on=('size', 'ASC')):
         names = [d.name for d in spc._dimensions]
-        qr = 'SELECT _id, _size, %s from %s order by _size' % (
+        sort_field, sort_dir = sort_on
+        qr = 'SELECT _id, _size, %s from %s order by _%s %s' % (
             ', '.join(names),
             spc._pfl_table,
+            sort_field,
+            sort_dir,
         )
 
         for row in self.execute(qr):
@@ -670,3 +675,7 @@ class SqliteBackend(SqlBackend):
         self.execute(qr, values)
         return 1
 
+    def reset_profile(self, spc, ghost_spc, id_):
+        self.set_profile(spc, id_, size=None)
+        qr = 'DROP TABLE IF EXISTS %s' % ghost_spc._pfl_table
+        self.execute(qr)

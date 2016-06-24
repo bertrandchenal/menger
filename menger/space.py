@@ -103,8 +103,14 @@ class MetaSpace(type):
 
 class Space(metaclass=MetaSpace):
 
+    _registered = False
+    _cache_ratio = 0.1
+
     @classmethod
     def register(cls, init=False):
+        if cls._registered and not init:
+            return
+        cls._registered = True
         ctx.db.register(cls, init=init)
         Profile.register(cls)
 
@@ -480,14 +486,22 @@ class Profile:
     def register(cls, space, snapshot=False):
         # Reset profile list
         cls._all_profiles[space] = {}
-        # Profile are returned sorted by size
-        res = list(ctx.db.get_profiles(space))
+        # Loop on db profiles
+        res = list(ctx.db.get_profiles(space, sort_on=('hits', 'DESC')))
+        max_cache = ctx.db.size(space) * space._cache_ratio
         for id_ , size, sign in res:
-            if size is None and not snapshot:
+            do_snap = snapshot and max_cache > 0
+            if size is None and not do_snap:
                 continue
-            # TODO: limit number of snapshot (based on number of hits),
-            # and garbage collect profile
-            pfl = Profile(space, id_, sign, size=size, snapshot=snapshot)
+            # Create snapshot as long as we do not create to much data
+            pfl = Profile(space, id_, sign, size=size, snapshot=do_snap)
+            max_cache -= pfl.size
+            if max_cache < 0:
+                # Drop all other profiles
+                pfl.reset()
+
+    def reset(self):
+        ctx.db.reset_profile(self.spc, self.ghost_spc, self.id_)
 
     def match(self, sgn):
         ok = all(self.signature[dim] >= depth
