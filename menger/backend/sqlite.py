@@ -6,22 +6,24 @@ from .sql import SqlBackend, LoadType
 
 
 def format_query(stm, params):
-    for k, v in params.items():
-        stm = stm.replace(':'+k, str(v))
-    return stm
+    if isinstance(params, dict):
+        for k, v in params.items():
+            stm = stm.replace(':' + k, str(v))
+        return stm
+    return stm.replace('?', '%s') % params
 
 
 class SqliteBackend(SqlBackend):
 
-    def __init__(self, path, readonly=False):
-        if readonly and path != ':memory:':
-            path = 'file:%s?mode=ro' % path
-            uri = True
-        else:
-            uri=False
-
-        self.readonly = readonly
-        self.connection = sqlite3.connect(path, uri=uri)
+    def __init__(self, path):
+        # TODO: re-enable ro mode when hit update is not made when we
+        # exit.
+        # if readonly and path != ':memory:':
+        #     path = 'file:%s?mode=ro' % path
+        #     uri = True
+        # else:
+        #     uri=False
+        self.connection = sqlite3.connect(path)
         self.cursor = self.connection.cursor()
         self.execute('PRAGMA journal_mode=WAL')
         self.execute('PRAGMA foreign_keys=1')
@@ -34,12 +36,14 @@ class SqliteBackend(SqlBackend):
             return self.cursor.execute(query, args)
         return self.cursor.execute(query)
 
-    def init_tables(self, space):
+    def init_tables(self, space, ghost=False):
         if space._name in self.init_done:
             return
         self.init_done.add(space._name)
 
         for dim in space._dimensions:
+            if dim.table is None:
+                continue
             # Dimension table
             self.execute(
                 'CREATE TABLE IF NOT EXISTS "%s" ( '
@@ -75,7 +79,7 @@ class SqliteBackend(SqlBackend):
 
         # Create index covering all dimensions
         self.execute(
-            'CREATE UNIQUE INDEX IF NOT EXISTS %s_dim_index ON "%s" (%s)' % (
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_index ON "%s" (%s)' % (
                 space._table,
                 space._table,
                 ', '.join(d.name for d in space._dimensions)
@@ -91,9 +95,35 @@ class SqliteBackend(SqlBackend):
                     )
                 )
 
-    def register(self, space):
-        if not self.readonly:
-            self.init_tables(space)
+        if ghost:
+            # No need for profile table
+            return
+
+        # Profile table
+        pfl_cols = [
+            '_id INTEGER PRIMARY KEY',
+            '_hits INTEGER',
+            '_size INTERGER',
+        ]
+        pfl_cols.extend('%s INTEGER' % d.name for d in space._dimensions)
+        query = 'CREATE TABLE IF NOT EXISTS "%s" (%s)'% (
+            space._pfl_table,
+            ', '.join(pfl_cols),
+        )
+        self.execute(query)
+
+        # Create index on profile table
+        self.execute(
+            'CREATE UNIQUE INDEX IF NOT EXISTS %s_index ON "%s" (%s)' % (
+                space._pfl_table,
+                space._pfl_table,
+                ', '.join(d.name for d in space._dimensions)
+                )
+            )
+
+    def register(self, space, init=False, ghost=False):
+        if init:
+            self.init_tables(space, ghost=ghost)
 
         # If the space is already known, nothing to do
         if space._name in self.stm:
@@ -326,7 +356,7 @@ class SqliteBackend(SqlBackend):
                 self.nb_tmp += 1
                 tmp_tables[field.dim.name].append(alias)
                 joins.append(
-                    self.tmp_join(space, alias, field.dim, field.depth)
+                    self.tmp_join(space, alias, field.dim, field.depth - 1)
                 )
                 col = '%s.parent' % alias
                 select.append(col)
@@ -349,7 +379,6 @@ class SqliteBackend(SqlBackend):
             last_version = vdim.last_coord()
             if last_version is not None:
                 filters.append(vdim.match(last_version))
-
         tmp_tables, joins = self.build_filters(space, filters, tmp_tables,
                                                joins)
 
@@ -378,9 +407,6 @@ class SqliteBackend(SqlBackend):
         self.execute(stm, params)
         res = self.cursor.fetchall()
         return res
-
-    def depth_cond(self, spc, dim, depth):
-        pass
 
     def build_filters(self, space, filters, tmp_tables=None, joins=None):
         tmp_tables = tmp_tables or defaultdict(list)
@@ -455,7 +481,6 @@ class SqliteBackend(SqlBackend):
             'spc': spc._table,
             'tmp': alias,
         }
-
         return join % params
 
     def delete(self, space, filters):
@@ -479,6 +504,10 @@ class SqliteBackend(SqlBackend):
         stm = 'INSERT INTO %s ' % other_space._table
         stm = stm + dice_stm
         self.execute(stm, dice_params)
+
+        qr = 'SELECT count(*) FROM %s' % other_space._table
+        cnt, = self.execute(qr).fetchone()
+        return cnt
 
     def glob(self, dim, parent_id, parent_depth, values, filters=[]):
         depth = len(values)
@@ -599,3 +628,45 @@ class SqliteBackend(SqlBackend):
             args = ('%' + substring + '%', max_depth)
 
         return self.execute(query, args)
+
+    def get_profiles(self, spc):
+        names = [d.name for d in spc._dimensions]
+        qr = 'SELECT _id, _size, %s from %s order by _size' % (
+            ', '.join(names),
+            spc._pfl_table,
+        )
+
+        for row in self.execute(qr):
+            id_ = row[0]
+            size = row[1]
+            values = dict(zip(names, row[2:]))
+            yield id_, size, values
+
+    def set_profile(self, spc, id_, size):
+        qr = 'UPDATE %s set _size = ? where _id = ?' % spc._pfl_table
+        self.execute(qr, (size, id_))
+
+    def inc_profile(self, spc, sgn):
+        cond = ['%s = ?' % d.name for d in spc._dimensions]
+        qr = 'SELECT _id, _hits from %s where %s' % (
+            spc._pfl_table,
+            ' AND '.join(cond),
+        )
+        values = tuple(sgn[d.name] for d in spc._dimensions)
+        res = self.execute(qr, values).fetchone()
+        if res is not None:
+            # Increment existing counter
+            id_, hits = res
+            qr = 'UPDATE %s SET _hits = ? WHERE _id = ?' % spc._pfl_table
+            self.execute(qr, (hits + 1, id_))
+            return hits + 1
+
+        # Create counter
+        qr = 'INSERT INTO %s (_hits, %s) VALUES (1, %s)' % (
+            spc._pfl_table,
+            ', '.join(d.name for d in spc._dimensions),
+            ', '.join('?' for d in spc._dimensions),
+        )
+        self.execute(qr, values)
+        return 1
+

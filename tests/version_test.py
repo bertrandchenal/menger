@@ -45,7 +45,7 @@ def session():
     if URI != ':memory:' and os.path.exists(URI):
         os.unlink(URI)
 
-    with connect(URI):
+    with connect(URI, init=True):
         VersionCube.load(DATA)
         yield 'session'
 

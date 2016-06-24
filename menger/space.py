@@ -5,8 +5,8 @@ from itertools import chain
 from json import dumps
 
 from . import backend
-from . import dimension
-from . import measure
+from .dimension import Coordinate, Dimension, Level, Tree, Version
+from .measure import Measure, Sum, Computed
 from .event import trigger
 from . import ctx
 
@@ -32,6 +32,7 @@ class MetaSpace(type):
 
         if not '_table' in attrs:
             attrs['_table'] = attrs['_name'] + '_spc'
+            attrs['_pfl_table'] = attrs['_name'] + '_pfl'
 
         # Inherits dimensions and measures
         for b in bases:
@@ -41,7 +42,7 @@ class MetaSpace(type):
             for dim in getattr(b, '_dimensions', []):
                 if dim.name in attrs:
                     # If type changed, ignore attr
-                    if not isinstance(attrs[dim.name], dimension.Dimension):
+                    if not isinstance(attrs[dim.name], Dimension):
                         continue
                     # Keep current class dim, but at the righ position
                     attrs[dim.name] = attrs.pop(dim.name)
@@ -51,7 +52,7 @@ class MetaSpace(type):
             for msr in getattr(b, '_measures', []):
                 if msr.name in attrs:
                     # If type changed, ignore attr
-                    if not isinstance(attrs[msr.name], measure.Measure):
+                    if not isinstance(attrs[msr.name], Measure):
                         continue
                     # Keep current class msr, but at the righ position
                     attrs[msr.name] = attrs.pop(msr.name)
@@ -63,10 +64,10 @@ class MetaSpace(type):
         versioned = None
         for k, v in attrs.items():
             # Collect dimensions
-            if isinstance(v, dimension.Dimension):
+            if isinstance(v, Dimension):
                 dimensions.append(v)
                 v.set_name(k)
-                if isinstance(v, dimension.Version):
+                if isinstance(v, Version):
                     if versioned is not None:
                         raise Exception('Maximum one version dimension is '
                                         'supported per space')
@@ -74,7 +75,7 @@ class MetaSpace(type):
                         versioned = v
 
             # Collect measures
-            elif isinstance(v, measure.Measure):
+            elif isinstance(v, Measure):
                 measures.append(v)
                 v.name = k
             else:
@@ -89,18 +90,27 @@ class MetaSpace(type):
         attrs['_versioned'] = versioned
         attrs['_measures'] = measures
         attrs['_db_measures'] = [
-            m for m in measures if isinstance(m, measure.Sum)
+            m for m in measures if isinstance(m, Sum)
         ]
 
         spc = super(MetaSpace, cls).__new__(cls, name, bases, attrs)
 
-        if bases:
+        if bases and not attrs.get('__ghost__'):
             SPACE_LIST.append(spc)
             SPACES[attrs['_name']] = spc
         return spc
 
 
 class Space(metaclass=MetaSpace):
+
+    @classmethod
+    def register(cls, init=False):
+        ctx.db.register(cls, init=init)
+        Profile.register(cls)
+
+    @classmethod
+    def refresh_cache(cls):
+        Profile.register(cls, snapshot=True)
 
     @classmethod
     def key(cls, point, create=False):
@@ -166,10 +176,10 @@ class Space(metaclass=MetaSpace):
 
         # Collect computed measure from the query
         for pos, field in enumerate(select):
-            if isinstance(field, measure.Computed):
+            if isinstance(field, Computed):
                 select[pos] = None
                 fn_msr[field].append(pos)
-            elif isinstance(field, dimension.Dimension):
+            elif isinstance(field, Dimension):
                 # Take first level
                 select[pos] = field[0]
 
@@ -192,7 +202,7 @@ class Space(metaclass=MetaSpace):
                     new_msr = getattr(cls, arg)
                     if new_msr in fn_msr:
                         continue
-                    if isinstance(new_msr, measure.Computed):
+                    if isinstance(new_msr, Computed):
                         for a in new_msr.args:
                             if a not in fn_msr:
                                 depend_args.append(a)
@@ -215,7 +225,14 @@ class Space(metaclass=MetaSpace):
                 ((pos, m) for m in fn_msr for pos in fn_msr[m]),
                 key=lambda x: fn_idx[x[1]],
             )
-        rows = ctx.db.dice(cls, select, filters)
+
+        # Get best matching profile
+        spc = cls
+        profile = Profile.search(cls, select)
+        if profile:
+            spc = profile.ghost_spc
+
+        rows = ctx.db.dice(spc, select, filters)
         nb_xtr = len(xtr_msr)
 
         # Returns rows
@@ -252,7 +269,7 @@ class Space(metaclass=MetaSpace):
     @classmethod
     def format(cls, row, select, dim_fmt=None, msr_fmt=None):
         for val, field in zip(row, select):
-            if isinstance(field, (dimension.Level, dimension.Coordinate)):
+            if isinstance(field, (Level, Coordinate)):
                 if dim_fmt is None:
                     yield field.dim.name_tuple(val)
                 elif dim_fmt == 'full':
@@ -302,18 +319,18 @@ class Space(metaclass=MetaSpace):
         # corresponding rows
         for pos, field in enumerate(select):
             # Translate dimension into first level
-            if isinstance(field, dimension.Dimension):
+            if isinstance(field, Dimension):
                 select[pos] = field[0]
-            elif isinstance(field, dimension.Coordinate):
+            elif isinstance(field, Coordinate):
                 # Use static values as delete filter
                 to_delete.append((field.dim, [field]))
                 # Resolve coordinate
                 select[pos] = field.key()
-            elif not isinstance(field, (measure.Measure, dimension.Level)):
+            elif not isinstance(field, (Measure, Level)):
                 raise ValueError('Unexpected field "%s" in snapshot' % field)
 
-        ctx.db.snapshot(cls, other_space, select, filters=filters,
-                        to_delete=to_delete)
+        return ctx.db.snapshot(cls, other_space, select, filters=filters,
+                               to_delete=to_delete)
 
     @classmethod
     def all_fields(cls):
@@ -325,7 +342,7 @@ class Space(metaclass=MetaSpace):
         for d in cls._dimensions:
             fields.append(d[-1])
         for m in cls._measures:
-            if isinstance(m, measure.Computed):
+            if isinstance(m, Computed):
                 continue
             fields.append(m)
         return fields
@@ -336,7 +353,7 @@ class Space(metaclass=MetaSpace):
         if not hasattr(cls, name):
             raise AttributeError( msg % (name, cls._name))
         attr = getattr(cls, name)
-        if not isinstance(attr, (dimension.Dimension, measure.Measure)):
+        if not isinstance(attr, (Dimension, Measure)):
             raise AttributeError(msg % (name, cls._name))
         return attr
 
@@ -346,7 +363,7 @@ class Space(metaclass=MetaSpace):
         if not hasattr(cls, name):
             raise AttributeError( msg % (name, cls._name))
         dim = getattr(cls, name)
-        if not isinstance(dim, dimension.Dimension):
+        if not isinstance(dim, Dimension):
             raise AttributeError(msg % (name, cls._name))
         return dim
 
@@ -356,9 +373,24 @@ class Space(metaclass=MetaSpace):
         if not hasattr(cls, name):
             raise AttributeError( msg % (name, cls._name))
         msr = getattr(cls, name)
-        if not isinstance(msr, measure.Measure):
+        if not isinstance(msr, Measure):
             raise AttributeError(msg % (name, cls._name))
         return msr
+
+    @classmethod
+    def clone(cls, _id, values, ghost=False):
+        attributes = OrderedDict()
+        for d in cls._dimensions:
+            if values[d.name] == 0:
+                continue
+            attributes[d.name] = d.clone(values[d.name])
+        for m in cls._measures:
+            attributes[m.name] = m.clone()
+
+        # Allows metaclass mechanism to threat ghost spaces as such
+        attributes['__ghost__'] = ghost
+        name = cls._name + '_cache_%s' % _id
+        return type(name, (Space,), attributes)
 
 def get_space(name):
     return SPACES.get(name)
@@ -378,15 +410,86 @@ def build_space(data_point, name):
             if isinstance(v[0], str):
                 col_type = str
             levels = ['Level-%s' % i for i,_ in enumerate(v)]
-            attributes[k] = dimension.Tree(k, levels, type=col_type)
+            attributes[k] = Tree(k, levels, type=col_type)
 
         elif isinstance(v, float):
-            attributes[k] = measure.Sum(k, type=float)
+            attributes[k] = Sum(k, type=float)
 
         elif isinstance(v, int):
-            attributes[k] = measure.Sum(k, type=int)
+            attributes[k] = Sum(k, type=int)
 
         else:
             raise Exception('Unknow type %s (on key %s)' % (type(v), k))
 
     return type(name, (Space,), attributes)
+
+
+class Profile:
+
+    _all_profiles = defaultdict(dict)
+
+    def __init__(self, spc, id_, signature, size=None, snapshot=False):
+        self.spc = spc
+        self.id_ = id_
+        self.size = size
+        self.signature = signature
+
+        if size is None and snapshot == False:
+            raise ValueError('Unable to compute profile size')
+
+        self.ghost_spc = spc.clone(id_, self.signature, ghost=True)
+        ctx.db.register(self.ghost_spc, init=True, ghost=True)
+        self._all_profiles[spc][id_] = self
+        if not snapshot:
+            return
+
+        self.size = spc.snapshot(self.ghost_spc)
+        # Save new size in db
+        ctx.db.set_profile(spc, self.id_, self.size)
+
+    @classmethod
+    def search(cls, spc, select):
+        # Build signature
+        sgn = cls.signature(spc, select)
+        # Increment signature counter
+        # TODO: increment attribute on class and sync with db when
+        # whe close the program and re-enable readonly on sqliten backend
+        ctx.db.inc_profile(spc, sgn)
+        # Find the best matching profile
+        key = lambda p: p.size
+        for pfl in sorted(cls._all_profiles[spc].values(), key=key):
+            if pfl.match(sgn):
+                return pfl
+
+    @classmethod
+    def signature(cls, spc, select):
+        sgn = defaultdict(int)
+        for field in select:
+            if isinstance(field, Level):
+                dim = field.dim
+                depth = field.depth
+            elif isinstance(field, Dimension):
+                dim = field
+                depth = 1
+            else:
+                continue
+            sgn[dim.name] = field.depth
+        return sgn
+
+    @classmethod
+    def register(cls, space, snapshot=False):
+        # Reset profile list
+        cls._all_profiles[space] = {}
+        # Profile are returned sorted by size
+        res = list(ctx.db.get_profiles(space))
+        for id_ , size, sign in res:
+            if size is None and not snapshot:
+                continue
+            # TODO: limit number of snapshot (based on number of hits),
+            # and garbage collect profile
+            pfl = Profile(space, id_, sign, size=size, snapshot=snapshot)
+
+    def match(self, sgn):
+        ok = all(self.signature[dim] >= depth
+                 for dim, depth in sgn.items())
+        return ok

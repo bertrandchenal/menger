@@ -23,12 +23,12 @@ class UserError(Exception):
 
 
 @contextmanager
-def connect(uri, rollback_on_close=False, readonly=False):
-    db = get_backend(uri, readonly=readonly)
-    for cls in iter_spaces():
-        db.register(cls)
+def connect(uri, rollback_on_close=False, init=False):
+    db = get_backend(uri)
     ctx.db = db
     ctx.uri = uri
+    for cls in iter_spaces():
+        cls.register(init=init)
     try:
         yield db
     except:
@@ -36,5 +36,5 @@ def connect(uri, rollback_on_close=False, readonly=False):
         raise
     else:
         db.close(rollback=rollback_on_close)
-        if not readonly:
+        if init:
             trigger('clear_cache')

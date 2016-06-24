@@ -87,6 +87,30 @@ class Dimension(object):
             return None
         return self.create_id(coord)
 
+    def coord(self, value=None):
+        if value is None:
+            return tuple()
+        if isinstance(value, (tuple, list)):
+            return tuple(map(self.type, value))
+
+        raise ValueError("Unexpected value %s" % value)
+
+    def contains(self, coord):
+        return self.key(coord) is not None
+
+    def match(self, *coords, depth=None):
+        'Return a filter tuple based on coordinates'
+        coords = [self(c) for c in coords]
+        if depth is not None:
+            return (self, coords, depth)
+        return (self, coords)
+
+    def __call__(self, value):
+        '''
+        Instanciate a Coordinate object for the given value
+        '''
+        return Coordinate(self, value)
+
     def __repr__(self):
         return '<Dimension %s>' % self.name
 
@@ -119,7 +143,7 @@ class Tree(Dimension):
 
         self.levels = OrderedDict()
         for depth, (name, label) in enumerate(levels):
-            self.levels[name] = Level(name, label, depth, self)
+            self.levels[name] = Level(name, label, depth + 1, self)
         self.depth = len(self.levels)
 
     def __getitem__(self, level_id):
@@ -129,40 +153,9 @@ class Tree(Dimension):
             level_id = iindex(self.levels.keys(), level_id)
         return self.levels[level_id]
 
-    def __call__(self, value):
-        '''
-        Instanciate a Coordinate object for the given value
-        '''
-        return Coordinate(self, value)
-
-    def match(self, *coords, depth=None):
-        'Return a filter tuple based on coordinates'
-        coords = [self(c) for c in coords]
-        if depth is not None:
-            return (self, coords, depth)
-        return (self, coords)
-
-    def set_name(self, name):
-        super(Tree, self).set_name(name)
-        table = (self.alias or self.name).lower()
-        self.closure_table = table + '_cls'
-
     @property
     def tuple_cache(self):
         return TUPLE_CACHE.setdefault(self.name, {})
-
-    def coord(self, value=None):
-        if value is None:
-            return tuple()
-        if isinstance(value, tuple):
-            return value
-        if isinstance(value, list):
-            return tuple(value)
-
-        raise ValueError("Unexpected value %s" % value)
-
-    def contains(self, coord):
-        return self.key(coord) is not None
 
     def delete(self, coord):
         coord_id = self.key(coord)
@@ -304,6 +297,10 @@ class Tree(Dimension):
             max_depth = self.depth
         return ctx.db.search(self, prefix, max_depth)
 
+    def clone(self, depth):
+        levels = [l.name for l in self.levels.values()][:depth]
+        return Tree(self.name, levels, type=self.type, alias=self.alias)
+
 
 class Version(Tree):
 
@@ -331,3 +328,39 @@ class Coordinate:
 
     def __repr__(self):
         return '<Coordinate %s %s>' % (self.dim.name, self.value)
+
+
+class Range(Dimension):
+
+    '''
+    A Range dimension contains float or int that will be partitioned
+    into custom ranges.
+    '''
+
+    def __init__(self, label, range_def, type=float, alias=None):
+        super(Range, self).__init__(label, type=type, alias=alias)
+        start, stop, step = range_def
+        self.ranges = [(i , i + step) for i in range(start, stop, step)]
+        self.levels = {label: Level(label, label, 0, self)}
+        self.depth = 1
+
+    def __getitem__(self, level_id):
+        return self.levels[self.label]
+
+    def _get_key(self, coord):
+        return coord
+
+    def get_name(self, coord_id):
+        return '%s - %' % coord_id
+
+    def name_tuple(self, coord_id):
+        return '%s - %' % coord_id
+
+    def drill(self, values=tuple()):
+        return self.ranges
+
+    def glob(self, value, filters=[]):
+        return [self.name_tuple(r) for r in self.ranges]
+
+    def format(self, value, fmt_type=None, offset=None):
+        return '/'.join(str(i) for i in islice(value, offset, None))

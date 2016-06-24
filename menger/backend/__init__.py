@@ -12,7 +12,7 @@ else:
     from .postgresql import PGBackend
 
 
-def get_backend(uri, readonly=False):
+def get_backend(uri):
     """
     uri string examples:
 
@@ -42,10 +42,10 @@ def get_backend(uri, readonly=False):
         if host:
             cn_str += "host='%s' " % host
 
-        backend = PGBackend(cn_str, readonly=readonly)
+        backend = PGBackend(cn_str)
 
     elif engine == 'sqlite':
-        backend = SqliteBackend(db, readonly=readonly)
+        backend = SqliteBackend(db)
 
     else:
         raise Exception('Backend %s not known' % backend)

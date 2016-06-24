@@ -2,12 +2,15 @@ import locale
 
 class Measure(object):
 
-    def __init__(self, label):
+    def __init__(self, label, type=float):
         self.label = label
         self.name = None
+        self.type = type
 
     def format(self, value, fmt_type=None):
-        return value
+        if self.type == float:
+            return locale.format('%.2f', value)
+        return self.type(value)
 
     def aggregator(self):
         total = 0
@@ -31,7 +34,7 @@ class Measure(object):
 class Sum(Measure):
 
     def __init__(self, label, type=float):
-        self.type = type
+        super(Sum, self).__init__(label, type=type)
         if self.type == int:
             self.sql_type = 'integer'
         elif self.type == float:
@@ -40,15 +43,12 @@ class Sum(Measure):
             raise Exception('Type %s not supported for dimension %s' % (
                 type, label
             ))
-        super(Sum, self).__init__(label)
-
-    def format(self, value, fmt_type=None):
-        if self.type == float:
-            return locale.format('%.2f', value)
-        return value
 
     def increment(self, old_value, new_value):
         return old_value + new_value
+
+    def clone(self):
+        return Sum(self.label, self.type)
 
 
 class Computed(Measure):
@@ -79,8 +79,14 @@ class Average(Computed):
             total += new_value
             cnt += 1
 
+    def clone(self):
+        return Average(self.label, *self.args)
+
 
 class Difference(Computed):
 
     def compute(self, first_msr, second_msr):
         return first_msr - second_msr
+
+    def clone(self):
+        return Difference(self.label, *self.args)

@@ -17,22 +17,25 @@ class SqlBackend(BaseBackend):
         self.stm = defaultdict(dict)
 
     def load(self, space, keys_vals, load_type=None):
-        nb_edit = 0
+        nb_insert = nb_update = 0
         for key, vals in keys_vals:
             db_vals = self.get(space, key)
             if not db_vals:
                 self.insert(space, key, vals)
+                nb_insert += 1
             elif load_type == LoadType.create_only:
                 continue
             elif load_type == LoadType.increment:
                 map(add, db_vals, vals)
                 self.update(space, key, vals)
+                nb_update += 1
             elif db_vals != vals:
                 self.update(space, key, vals)
+                nb_update += 1
             else:
                 continue
-            nb_edit += 1
-        return nb_edit
+
+        return nb_insert, nb_update
 
     def get(self, space, key):
         self.cursor.execute(self.stm[space._name]['get'], key)

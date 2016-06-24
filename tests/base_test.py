@@ -3,7 +3,7 @@ import os
 import pytest
 from menger import dimension, Space, measure, connect
 
-URI = ':memory:' #'/tmp/test.db'
+URI = '/tmp/test.db'
 
 DATA = [
     {'date': [2014, 1, 1],
@@ -38,7 +38,7 @@ def session():
     if URI != ':memory:' and os.path.exists(URI):
         os.unlink(URI)
 
-    with connect(URI) as db:
+    with connect(URI, init=True) as db:
         try:
             Cube.load(DATA)
             yield 'session'
