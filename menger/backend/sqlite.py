@@ -651,31 +651,31 @@ class SqliteBackend(SqlBackend):
         qr = 'UPDATE %s set _size = ? where _id = ?' % spc._pfl_table
         self.execute(qr, (size, id_))
 
-    def inc_profile(self, spc, sgn):
-        cond = ['%s = ?' % d.name for d in spc._dimensions]
+    def inc_profile(self, spc, sgn, inc):
+        cond = ['%s = ?' % name for name, _ in sgn]
         qr = 'SELECT _id, _hits from %s where %s' % (
             spc._pfl_table,
             ' AND '.join(cond),
         )
-        values = tuple(sgn[d.name] for d in spc._dimensions)
+        values = tuple(depth for _, depth in sgn)
         res = self.execute(qr, values).fetchone()
         if res is not None:
             # Increment existing counter
             id_, hits = res
             qr = 'UPDATE %s SET _hits = ? WHERE _id = ?' % spc._pfl_table
-            self.execute(qr, (hits + 1, id_))
-            return hits + 1
+            self.execute(qr, (hits + inc, id_))
+            return hits + inc
 
         # Create counter
-        qr = 'INSERT INTO %s (_hits, %s) VALUES (1, %s)' % (
+        qr = 'INSERT INTO %s (_hits, %s) VALUES (?, %s)' % (
             spc._pfl_table,
-            ', '.join(d.name for d in spc._dimensions),
-            ', '.join('?' for d in spc._dimensions),
+            ', '.join(name for name, _ in sgn),
+            ', '.join('?' for _ in sgn),
         )
-        self.execute(qr, values)
-        return 1
+        self.execute(qr, (inc,) + values)
+        return inc
 
     def reset_profile(self, spc, ghost_spc, id_):
         self.set_profile(spc, id_, size=None)
-        qr = 'DROP TABLE IF EXISTS %s' % ghost_spc._pfl_table
+        qr = 'DROP TABLE IF EXISTS %s' % ghost_spc._table
         self.execute(qr)

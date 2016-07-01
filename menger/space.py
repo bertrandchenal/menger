@@ -3,6 +3,7 @@ from copy import copy
 from hashlib import md5
 from itertools import chain
 from json import dumps
+from time import time
 
 from . import backend
 from .dimension import Coordinate, Dimension, Level, Tree, Version
@@ -234,7 +235,7 @@ class Space(metaclass=MetaSpace):
 
         # Get best matching profile
         spc = cls
-        profile = Profile.search(cls, select)
+        profile = Profile.best(cls, select)
         if profile:
             spc = profile.ghost_spc
 
@@ -433,34 +434,29 @@ def build_space(data_point, name):
 class Profile:
 
     _all_profiles = defaultdict(dict)
+    _hits = defaultdict(lambda: defaultdict(int))
+    _last_sync = 0
 
-    def __init__(self, spc, id_, signature, size=None, snapshot=False):
+    def __init__(self, spc, id_, sgn_dict, size=None):
         self.spc = spc
         self.id_ = id_
+        self.sgn_dict = sgn_dict
         self.size = size
-        self.signature = signature
 
-        if size is None and snapshot == False:
-            raise ValueError('Unable to compute profile size')
-
-        self.ghost_spc = spc.clone(id_, self.signature, ghost=True)
-        ctx.db.register(self.ghost_spc, init=True, ghost=True)
         self._all_profiles[spc][id_] = self
-        if not snapshot:
-            return
-
-        self.size = spc.snapshot(self.ghost_spc)
-        # Save new size in db
-        ctx.db.set_profile(spc, self.id_, self.size)
+        self.ghost_spc = spc.clone(id_, self.sgn_dict, ghost=True)
 
     @classmethod
-    def search(cls, spc, select):
+    def best(cls, spc, select):
         # Build signature
         sgn = cls.signature(spc, select)
         # Increment signature counter
-        # TODO: increment attribute on class and sync with db when
-        # whe close the program and re-enable readonly on sqliten backend
-        ctx.db.inc_profile(spc, sgn)
+        cls._hits[spc._name][sgn] += 1
+        now = time()
+        if cls._last_sync < now - 1:
+            cls.sync()
+            cls._last_sync = now
+
         # Find the best matching profile
         key = lambda p: p.size
         for pfl in sorted(cls._all_profiles[spc].values(), key=key):
@@ -468,8 +464,21 @@ class Profile:
                 return pfl
 
     @classmethod
+    def sync(cls):
+        # Save hits numbers to the db
+        for name, sgn_vals in cls._hits.items():
+            space = get_space(name)
+            for sgn, nb_hits in sgn_vals.items():
+                if not any(v for _, v in sgn):
+                    continue
+                ctx.db.inc_profile(space, sgn, nb_hits)
+        cls._hits.clear()
+
+    @classmethod
     def signature(cls, spc, select):
-        sgn = defaultdict(int)
+        # Creates a tuple containing the name and depth of each
+        # dimension in the select list
+        values = defaultdict(int)
         for field in select:
             if isinstance(field, Level):
                 dim = field.dim
@@ -479,31 +488,42 @@ class Profile:
                 depth = 1
             else:
                 continue
-            sgn[dim.name] = field.depth
+            values[dim.name] = field.depth
+        sgn = tuple((d.name, values[d.name]) for d in spc._dimensions)
         return sgn
 
     @classmethod
     def register(cls, space, snapshot=False):
         # Reset profile list
         cls._all_profiles[space] = {}
-        # Loop on db profiles
         res = list(ctx.db.get_profiles(space, sort_on=('hits', 'DESC')))
         max_cache = ctx.db.size(space) * space._cache_ratio
-        for id_ , size, sign in res:
+        # Loop on db profiles
+        for id_ , size, sgn in res:
             do_snap = snapshot and max_cache > 0
             if size is None and not do_snap:
                 continue
-            # Create snapshot as long as we do not create to much data
-            pfl = Profile(space, id_, sign, size=size, snapshot=do_snap)
-            max_cache -= pfl.size
-            if max_cache < 0:
-                # Drop all other profiles
+            pfl = Profile(space, id_, sgn, size=size)
+            if do_snap and max_cache > 0:
+                # Create snapshot
+                pfl.snapshot()
+                max_cache -= pfl.size
+            if max_cache <= 0:
+                # Remove old data
                 pfl.reset()
 
-    def reset(self):
+    def reset(self): # XXX trigger this method for event clear_cache
         ctx.db.reset_profile(self.spc, self.ghost_spc, self.id_)
 
+    def snapshot(self):
+        self.reset()
+        ctx.db.register(self.ghost_spc, init=True, ghost=True)
+        self.size = self.spc.snapshot(self.ghost_spc)
+        # Save new size in db
+        ctx.db.set_profile(self.spc, self.id_, self.size)
+
     def match(self, sgn):
-        ok = all(self.signature[dim] >= depth
-                 for dim, depth in sgn.items())
+        # Returns True if all profile signature is large enough on
+        # each dimension
+        ok = all(self.sgn_dict[dim] >= depth for dim, depth in sgn)
         return ok
