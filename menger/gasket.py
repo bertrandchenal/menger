@@ -77,7 +77,7 @@ def dice(query):
         filters.extend(cond)
 
     data = None
-    dim_fmt = query.get('dim_fmt', 'leaf')
+    dim_fmt = query.get('dim_fmt', 'auto')
     for spc, msrs in msr_group.items():
         space = get_space(spc)
         select = dims + msrs

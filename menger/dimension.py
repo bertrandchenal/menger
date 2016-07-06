@@ -26,12 +26,13 @@ def iindex(iterable, position):
 
 class Dimension(object):
 
-    def __init__(self, label, type=str, alias=None):
+    def __init__(self, label, type=str, alias=None, fmt='leaf'):
         self.label = label
         self.type = type
         self.name = None
         self.alias = alias
         self.table = None
+        self.fmt = fmt
 
         if self.type == str:
             self.sql_type = 'varchar'
@@ -134,8 +135,8 @@ class Tree(Dimension):
 
     '''
 
-    def __init__(self, label, levels=None, type=str, alias=None):
-        super(Tree, self).__init__(label, type=type, alias=alias)
+    def __init__(self, label, levels=None, type=str, alias=None, fmt='leaf'):
+        super(Tree, self).__init__(label, type=type, alias=alias, fmt=fmt)
         if not levels:
             levels = [(label, label)]
         elif not isinstance(levels[0], tuple):
@@ -304,10 +305,10 @@ class Tree(Dimension):
 
 class Version(Tree):
 
-    def __init__(self, label, type=str, alias=None):
+    def __init__(self, label, type=str, alias=None, fmt='leaf'):
         levels = [label]
         super(Version, self).__init__(label, levels=levels, type=type,
-                                      alias=alias)
+                                      alias=alias, fmt=fmt)
         if self.depth > 1:
             raise ValueError('Version dimension support only on level')
 
@@ -337,8 +338,8 @@ class Range(Dimension):
     into custom ranges.
     '''
 
-    def __init__(self, label, range_def, type=float, alias=None):
-        super(Range, self).__init__(label, type=type, alias=alias)
+    def __init__(self, label, range_def, type=float, alias=None, fmt='leaf'):
+        super(Range, self).__init__(label, type=type, alias=alias, fmt=fmt)
         start, stop, step = range_def
         self.ranges = [(i , i + step) for i in range(start, stop, step)]
         self.levels = {label: Level(label, label, 0, self)}

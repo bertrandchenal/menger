@@ -277,11 +277,12 @@ class Space(metaclass=MetaSpace):
     def format(cls, row, select, dim_fmt=None, msr_fmt=None):
         for val, field in zip(row, select):
             if isinstance(field, (Level, Coordinate)):
-                if dim_fmt is None:
+                fmt = field.dim.fmt if dim_fmt == 'auto' else dim_fmt
+                if fmt is None:
                     yield field.dim.name_tuple(val)
-                elif dim_fmt == 'full':
+                elif fmt == 'full':
                     yield field.dim.format(field.dim.name_tuple(val))
-                elif dim_fmt == 'leaf':
+                elif fmt == 'leaf':
                     yield field.dim.get_name(val)
             else:
                 if msr_fmt is None:
