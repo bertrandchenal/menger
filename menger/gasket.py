@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import product
 import locale
 import re
 
@@ -88,6 +89,14 @@ def dice(query):
             data = data.merge(spc_data, on=idx, suffixes=suffixes)
         prev_space = space
 
+    # Generate all combination of selected dimensions
+    if not query.get('skip_zero'):
+        full_idx = DataFrame(
+            list(product(*(data[i].drop_duplicates() for i in idx))),
+            columns=idx
+        )
+        data = full_idx.merge(data, on=idx, how='left')
+
     # Pivot dataframe
     pivot = query.get('pivot_on')
     if pivot is not None and len(dims) > 1:
@@ -100,6 +109,7 @@ def dice(query):
     # Hide empty lines
     if query.get('skip_zero'):
         data.dropna(how='all', inplace=True)
+
     # Replace NaN's with zero
     data.fillna(0, inplace=True)
 
