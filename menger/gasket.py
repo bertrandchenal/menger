@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import product
+from itertools import product, chain
 import locale
 import re
 
@@ -124,23 +124,10 @@ def dice(query):
     data = data.sort_values(sort_by, ascending=ascending)
     data = data.iloc[:query.get('limit')]
 
-    # We did pass measure formating to space.dice to make above sort
-    # works, so we do it now
-    msr_fmt = query.get('msr_fmt')
-    by_labels = {f.label: f for f in msrs}
-    if msr_fmt:
-        if pivot is not None:
-            for column in data.columns.values:
-                field = by_labels.get(column[0])
-                if field is None:
-                    continue
-                data[column] = data[column].apply(field.format)
-        else:
-            for mpos, m in enumerate(msrs):
-                pos = mpos + len(dims)
-                data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
-
+    # Compute totals
     totals = [''] * len(data.columns)
+    all_msrs = list(chain(*msr_group.values()))
+    by_labels = {f.label: f for f in all_msrs}
     if pivot is not None:
         for pos, column in enumerate(data.columns.values):
             field = by_labels.get(column[0])
@@ -149,9 +136,24 @@ def dice(query):
             totals[pos] = field.format(data.iloc[:, pos].sum())
 
     else:
-        for mpos, m in enumerate(msrs):
+        for mpos, m in enumerate(all_msrs):
             pos = mpos + len(dims)
             totals[pos] = m.format(data.iloc[:, pos].sum())
+
+    # We did pass measure formating to space.dice to make above sort
+    # works, so we do it now
+    msr_fmt = query.get('msr_fmt', 'auto')
+    if msr_fmt:
+        if pivot is not None:
+            for column in data.columns.values:
+                field = by_labels.get(column)
+                if field is None:
+                    continue
+                data[column] = data[column].apply(field.format)
+        else:
+            for mpos, m in enumerate(all_msrs):
+                pos = mpos + len(dims)
+                data.iloc[:, pos] = data.iloc[:, pos].apply(m.format)
 
     return {
         'data': data,
