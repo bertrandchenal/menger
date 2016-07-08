@@ -207,6 +207,7 @@ See the tests folder for examples on the following features:
   - Versioning
   - Filter & Limit
   - Gasket
+  - In-db caching
 
 ## Roadmap:
 
