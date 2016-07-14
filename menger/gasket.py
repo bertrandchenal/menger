@@ -6,14 +6,22 @@ import re
 from pandas import DataFrame
 
 from . import get_space
-
+from . import dimension
 
 LEVEL_RE = re.compile('^(.+)\[(.+)\]$')
 
 
+def get_label(item):
+    if isinstance(item, dimension.Level):
+        return '%s: %s' % (item.dim.label, item.label)
+    return item.label
+
 def dice_by_spc(space, select, filters=None, dim_fmt='leaf'):
     filters = filters or []
-    columns = [s.label for s in select]
+    columns = []
+    for s in select:
+        columns.append(get_label(s))
+
     res = space.dice(select, filters, dim_fmt=dim_fmt)
     # TODO add an iterator on res that will raise LimitException if
     # the result gets to large
@@ -68,7 +76,7 @@ def dice(query):
         if attr in dims:
             continue
         dims.append(attr)
-        idx.append(attr.label)
+        idx.append(get_label(attr))
 
     filters = []
     for name, vals in fltrs:
@@ -127,7 +135,7 @@ def dice(query):
     # Compute totals
     totals = [''] * len(data.columns)
     all_msrs = list(chain(*msr_group.values()))
-    by_labels = {f.label: f for f in all_msrs}
+    by_labels = {get_label(f): f for f in all_msrs}
     if pivot is not None:
         for pos, column in enumerate(data.columns.values):
             field = by_labels.get(column[0])
