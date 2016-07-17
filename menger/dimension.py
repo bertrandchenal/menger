@@ -303,6 +303,17 @@ class Tree(Dimension):
         return Tree(self.name, levels, type=self.type, alias=self.alias)
 
 
+class Date(Tree):
+
+    def __init__(self, label):
+        super(Date, self).__init__(label, levels=['Year', 'Month', 'Day'],
+                                   type=int, fmt='full')
+
+    def format(self, value, fmt_type=None, offset=None):
+        fmt = lambda x: '%02d' % x
+        return '/'.join(fmt(i) for i in islice(value, offset, None))
+
+
 class Version(Tree):
 
     def __init__(self, label, type=str, alias=None, fmt='leaf'):
