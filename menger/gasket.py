@@ -130,7 +130,9 @@ def dice(query):
         sort_by.insert(0, sort_by.pop(sort_pos))
         ascending = direction == 'asc'
     data = data.sort_values(sort_by, ascending=ascending)
-    data = data.iloc[:query.get('limit')]
+    limit = query.get('limit')
+    if limit is not None:
+        data = data.iloc[:limit]
 
     # Compute totals
     totals = [''] * len(data.columns)
