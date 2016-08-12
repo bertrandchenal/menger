@@ -484,6 +484,7 @@ class SqliteBackend(SqlBackend):
         return join % params
 
     def delete(self, space, filters):
+        filters = filters or []
         query = 'DELETE FROM %s' % space._table
         tmp_tables, joins = self.build_filters(space, filters)
         conditions = []
