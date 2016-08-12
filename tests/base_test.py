@@ -70,6 +70,11 @@ def test_dice(session, cube=None):
          'filters': [Cube.date.match((2014, 1, 1))],
          'values' : [((2014, 1, 1), 10.0)]
      },
+        {'select': [Cube.place['Country'], Cube.total],
+         'filters': [Cube.place.match(('EU', 'BE', 'BRU'),
+                                      ('EU', 'BE', 'CRL'))],
+         'values' : [(('EU', 'BE'), 6.0)]
+     },
         {'select': [Cube.date['Day'], Cube.total],
          'filters': [Cube.date.match((2014, 1))],
          'values' : [((2014, 1, 1), 10.0,),
