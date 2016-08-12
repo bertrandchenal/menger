@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+from base_test import Cube
+from menger import connect, Cli
+
+with connect('test.db', init=True):
+    Cli.run('Cube')

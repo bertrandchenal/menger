@@ -41,8 +41,7 @@ class Cli(object):
                 continue
             if values:
                 depth = len(values) - 1
-                values = tuple(takewhile(lambda x: x is not None, values))
-                filters.append(attr.match(values))
+                filters.append(attr.match(*attr.glob(values)))
                 level = attr[depth]
                 select.append(level)
             else:
