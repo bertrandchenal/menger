@@ -35,6 +35,7 @@ def dice(query):
     main_spc = None
     idx = []
     dims = []
+    to_label = {}
 
     for name in query['select']:
         if '.' in name:
@@ -61,8 +62,8 @@ def dice(query):
             if len(groups) != 2:
                 msg = '"%s" not understood' % name
                 raise AttributeError(msg)
-            name, level = groups
-            dim = main_spc.get_dimension(name)
+            dim_name, level = groups
+            dim = main_spc.get_dimension(dim_name)
 
             # getitem on dimension also support integers
             try:
@@ -76,7 +77,9 @@ def dice(query):
         if attr in dims:
             continue
         dims.append(attr)
-        idx.append(get_label(attr))
+        label = get_label(attr)
+        idx.append(label)
+        to_label[name] = label
 
     filters = []
     for name, vals in fltrs:
@@ -98,7 +101,7 @@ def dice(query):
         prev_space = space
 
     # Generate all combination of selected dimensions
-    if not query.get('skip_zero'):
+    if not query.get('skip_zero') and idx:
         full_idx = DataFrame(
             list(product(*(data[i].drop_duplicates() for i in idx))),
             columns=idx
@@ -107,13 +110,20 @@ def dice(query):
 
     # Pivot dataframe
     pivot = query.get('pivot_on')
-    if pivot is not None and len(dims) > 1:
-        data = data.set_index(idx).unstack(pivot)
+    if pivot is not None and not isinstance(pivot, (list, tuple)):
+        pivot = [pivot]
+    if pivot is not None and len(dims) > len(pivot):
+        cols = data.columns.values
+        for pos, name in enumerate(pivot):
+            if name not in cols:
+                # Interpret pivot as select item
+                pivot[pos] = to_label.get(name, name)
+        data = data.set_index(idx).unstack(level=pivot)
         data.reset_index(inplace=True)
         headers = list(zip(*list(data.columns.values)))
+
     else:
         headers = [list(data.columns.values)]
-
     # Hide empty lines
     if query.get('skip_zero'):
         data.dropna(how='all', inplace=True)
@@ -152,7 +162,7 @@ def dice(query):
 
     # We did pass measure formating to space.dice to make above sort
     # works, so we do it now
-    msr_fmt = query.get('msr_fmt', 'auto')
+    msr_fmt = query.get('msr_fmt')
     if msr_fmt:
         if pivot is not None:
             for column in data.columns.values:

@@ -39,7 +39,13 @@ def test_alone(session):
     check_data = [tuple(row) for row in check_data.values]
     assert ref_data == check_data
 
-    # Test measure & dimension format
+    # Test measure format
+    query['msr_fmt'] = 'auto'
+    check_data = gasket.dice(query)['data']
+    check_data = [tuple(row) for row in check_data.values]
+    assert check_data == [('30.00', '4.00', '7.50')]
+
+    # Test dimension format
     for fmt in [None, 'leaf', 'full']:
         ref_data = list(Cube.dice([
             Cube.place['Country'],
@@ -72,12 +78,28 @@ def test_multi(session):
 def test_pivot(session):
     query = {
         'select': ['date[Day]', 'place', 'cube.count'],
-        'pivot_on': ['Day'],
+        'pivot_on': ['date[Day]'],
         'dim_fmt': 'leaf',
     }
+    res = gasket.dice(query)
+    check_data = res['data'].reset_index()
+    assert all(check_data['Place'].values == ['EU', 'USA'])
+    assert res['headers'] == [('Place', 'Count', 'Count'), ('', 1, 2)]
+
+    # Use user-friendly  name to pivot
+    query['pivot_on'] = ['Date: Day']
     check_data = gasket.dice(query)['data'].reset_index()
     assert all(check_data['Place'].values == ['EU', 'USA'])
 
+    # Pivot on both dim
+    query['pivot_on'] = ['Date: Day', 'place']
+    res = gasket.dice(query)
+    assert list(res['data']['Place'].values) == ['EU', 'USA'] * 2
+
+    # Pivot by id
+    query['pivot_on'] = 1
+    res = gasket.dice(query)
+    assert list(res['data']['Count']['EU']) == [2.0, 1.0]
 
 def test_limit(session):
     # Test only measures
@@ -104,4 +126,4 @@ def test_filter(session):
     }
 
     check_data = gasket.dice(query)['data']
-    assert all(check_data['City'].values == ['BRU', 'CRL'])
+    assert all(check_data['Place: City'].values == ['BRU', 'CRL'])
