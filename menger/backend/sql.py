@@ -26,7 +26,7 @@ class SqlBackend(BaseBackend):
             elif load_type == LoadType.create_only:
                 continue
             elif load_type == LoadType.increment:
-                map(add, db_vals, vals)
+                vals = tuple(map(add, db_vals, vals))
                 self.update(space, key, vals)
                 nb_update += 1
             elif db_vals != vals:
