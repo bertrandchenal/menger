@@ -84,8 +84,8 @@ def dice(query):
     filters = []
     for name, vals in fltrs:
         dim = main_spc.get_dimension(name)
-        cond = [dim.match(tuple(v)) for v in vals]
-        filters.extend(cond)
+        cond = dim.match(*(tuple(v) for v in vals))
+        filters.append(cond)
 
     data = None
     dim_fmt = query.get('dim_fmt', 'auto')
